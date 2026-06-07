@@ -34,6 +34,7 @@ class EnergyConsumption(Base):
     cost: Mapped[float | None] = mapped_column(Numeric(12, 4))
 
     source: Mapped[str] = mapped_column(String(20), default="manual")
+    consumption_type: Mapped[str] = mapped_column(String(20), default="consumption")  # consumption | production
     is_estimated: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str | None] = mapped_column(Text)
     external_id: Mapped[str | None] = mapped_column(String(255))

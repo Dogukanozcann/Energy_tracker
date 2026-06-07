@@ -16,6 +16,7 @@ class EnergyConsumptionCreate(BaseModel):
     unit: str = "kWh"
     cost: float | None = None
     source: str = "manual"
+    consumption_type: str = "consumption"
     is_estimated: bool = False
     notes: str | None = None
     external_id: str | None = None
@@ -48,6 +49,7 @@ class EnergyConsumptionResponse(BaseModel):
     unit: str
     cost: float | None
     source: str
+    consumption_type: str
     is_estimated: bool
     notes: str | None
     external_id: str | None
