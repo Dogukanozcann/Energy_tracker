@@ -65,6 +65,7 @@ async def create_consumption_batch(
 async def list_consumption(
     facility_id: UUID = Query(..., description="Tesis ID"),
     energy_source_id: UUID | None = Query(None, description="Enerji kaynağı filtresi"),
+    consumption_type: str | None = Query(None, description="consumption | production"),
     date_from: datetime | None = Query(None, description="Başlangıç tarihi (ISO8601)"),
     date_to: datetime | None = Query(None, description="Bitiş tarihi (ISO8601)"),
     skip: int = Query(0, ge=0),
@@ -74,7 +75,7 @@ async def list_consumption(
 ):
     """
     Tesise ait enerji tüketim kayıtlarını listeler.
-    Zaman aralığı ve enerji kaynağı ile filtreleme yapılabilir.
+    Zaman aralığı, enerji kaynağı ve tüketim tipi ile filtreleme yapılabilir.
     """
     service = EnergyConsumptionService(db)
     try:
@@ -82,6 +83,7 @@ async def list_consumption(
             facility_id=facility_id,
             user_id=current_user.id,
             energy_source_id=energy_source_id,
+            consumption_type=consumption_type,
             date_from=date_from,
             date_to=date_to,
             skip=skip,
