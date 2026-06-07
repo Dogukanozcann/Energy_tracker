@@ -122,6 +122,7 @@ export const consumptionApi = {
       date_from?: string
       date_to?: string
       energy_source_id?: string
+      consumption_type?: string
       skip?: number
       limit?: number
     },
@@ -131,6 +132,8 @@ export const consumptionApi = {
     if (params?.date_to) searchParams.set("date_to", params.date_to)
     if (params?.energy_source_id)
       searchParams.set("energy_source_id", params.energy_source_id)
+    if (params?.consumption_type)
+      searchParams.set("consumption_type", params.consumption_type)
     if (params?.skip) searchParams.set("skip", String(params.skip))
     if (params?.limit) searchParams.set("limit", String(params.limit))
     return request<import("../types").EnergyConsumptionListResponse>(
@@ -233,4 +236,65 @@ export const alertApi = {
         deviation_threshold: threshold,
       }),
     }),
+}
+
+// ---- Cost Savings ----
+
+export const savingsApi = {
+  list: (facilityId: string, params?: { date_from?: string; date_to?: string; skip?: number; limit?: number }) => {
+    const searchParams = new URLSearchParams({ facility_id: facilityId })
+    if (params?.date_from) searchParams.set("date_from", params.date_from)
+    if (params?.date_to) searchParams.set("date_to", params.date_to)
+    if (params?.skip) searchParams.set("skip", String(params.skip))
+    if (params?.limit) searchParams.set("limit", String(params.limit))
+    return request<import("../types").ProductionSavingsListResponse>(
+      `/cost-savings/?${searchParams}`,
+    )
+  },
+
+  summary: (facilityId: string, dateFrom?: string, dateTo?: string) => {
+    const params = new URLSearchParams({ facility_id: facilityId })
+    if (dateFrom) params.set("date_from", dateFrom)
+    if (dateTo) params.set("date_to", dateTo)
+    return request<import("../types").SavingsSummaryResponse>(
+      `/cost-savings/summary?${params}`,
+    )
+  },
+
+  daily: (facilityId: string, dateFrom?: string, dateTo?: string) => {
+    const params = new URLSearchParams({ facility_id: facilityId })
+    if (dateFrom) params.set("date_from", dateFrom)
+    if (dateTo) params.set("date_to", dateTo)
+    return request<import("../types").DailyComparisonResponse>(
+      `/cost-savings/daily?${params}`,
+    )
+  },
+}
+
+// ---- Weekly Comparison ----
+
+export const comparisonApi = {
+  weekly: (facilityId: string, endDate?: string) => {
+    const params = new URLSearchParams({ facility_id: facilityId })
+    if (endDate) params.set("end_date", endDate)
+    return request<import("../types").WeeklyComparisonResponse>(
+      `/weekly-comparison/?${params}`,
+    )
+  },
+
+  checkAlerts: (facilityId: string, threshold = 20, endDate?: string) => {
+    const params = new URLSearchParams({ facility_id: facilityId, threshold_pct: String(threshold) })
+    if (endDate) params.set("end_date", endDate)
+    return request<import("../types").WeeklyAlertResponse>(
+      `/weekly-comparison/check-alerts?${params}`,
+      { method: "POST" },
+    )
+  },
+}
+
+// ---- Energy Sources ----
+
+export const sourceApi = {
+  list: () =>
+    request<import("../types").EnergySource[]>("/energy-sources/"),
 }
