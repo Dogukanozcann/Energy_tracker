@@ -6,6 +6,8 @@ from app.models.energy_consumption import EnergyConsumption
 from app.models.carbon_footprint import CarbonFootprintItem, CarbonFootprint
 from app.models.alert import Alert
 from app.models.action import Action
+from app.models.system_setting import SystemSetting
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "Base",
@@ -18,4 +20,6 @@ __all__ = [
     "CarbonFootprint",
     "Alert",
     "Action",
+    "SystemSetting",
+    "AuditLog",
 ]

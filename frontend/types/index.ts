@@ -186,3 +186,60 @@ export interface EnergySource {
   co2_factor_scope_1: number | null
   co2_factor_scope_2: number | null
 }
+
+export interface EnergySourceDetail extends EnergySource {
+  co2_factor_source: string | null
+  factor_year: number | null
+  unit_alt: string | null
+  co2_factor_scope_1_alt: number | null
+  co2_factor_scope_2_alt: number | null
+  fuel_density: number | null
+  fuel_carbon_ratio: number | null
+  fuel_co2_per_liter: number | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ---- Admin Types ----
+
+export interface UserDetail extends User {
+  email_verified_at: string | null
+  last_login_at: string | null
+}
+
+export interface UserListResponse {
+  items: UserDetail[]
+  total: number
+}
+
+export interface SystemSetting {
+  id: string
+  key: string
+  value: string
+  description: string | null
+  category: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SettingListResponse {
+  items: SystemSetting[]
+  total: number
+}
+
+export interface AuditLogEntry {
+  id: string
+  user_email: string | null
+  action: string
+  resource: string
+  resource_id: string | null
+  details: string | null
+  ip_address: string | null
+  created_at: string
+}
+
+export interface LogListResponse {
+  items: AuditLogEntry[]
+  total: number
+}

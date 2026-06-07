@@ -63,3 +63,15 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_admin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Admin yetkisi gerektiren endpoint'ler için. role='admin' olmalı."""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu işlem için admin yetkisi gerekli.",
+        )
+    return current_user

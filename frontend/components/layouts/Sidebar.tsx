@@ -11,6 +11,10 @@ import {
   LogOut,
   ChevronLeft,
   Globe,
+  Settings,
+  Shield,
+  Users,
+  ClipboardList,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
@@ -22,6 +26,14 @@ const navItems = [
   { href: "/facilities", label: "Tesisler", icon: Building2 },
   { href: "/energy", label: "Enerji", icon: Zap },
   { href: "/alerts", label: "Uyarılar", icon: Bell },
+]
+
+const adminNavItems = [
+  { href: "/admin", label: "Admin Panel", icon: Shield },
+  { href: "/admin/energy-sources", label: "Enerji Kaynakları", icon: Zap },
+  { href: "/admin/users", label: "Kullanıcılar", icon: Users },
+  { href: "/admin/settings", label: "Sistem Ayarları", icon: Settings },
+  { href: "/admin/logs", label: "Denetim Kayıtları", icon: ClipboardList },
 ]
 
 export function Sidebar() {
@@ -66,7 +78,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-4 space-y-1">
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const active = pathname.startsWith(item.href)
           return (
@@ -85,6 +97,34 @@ export function Sidebar() {
             </Link>
           )
         })}
+
+        {user?.role === "admin" && !collapsed && (
+          <div className="pt-3 pb-1">
+            <p className="px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+              Yönetim
+            </p>
+          </div>
+        )}
+
+        {user?.role === "admin" &&
+          adminNavItems.map((item) => {
+            const active = pathname.startsWith(item.href)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                  active
+                    ? "bg-brand-50 text-brand-700"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+                )}
+              >
+                <item.icon className="w-5 h-5 shrink-0" />
+                {!collapsed && <span className="ml-3">{item.label}</span>}
+              </Link>
+            )
+          })}
       </nav>
 
       {/* User */}

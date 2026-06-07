@@ -298,3 +298,68 @@ export const sourceApi = {
   list: () =>
     request<import("../types").EnergySource[]>("/energy-sources/"),
 }
+
+// ---- Admin ----
+
+export const adminApi = {
+  // Energy Sources
+  listSources: () =>
+    request<import("../types").EnergySourceDetail[]>("/admin/energy-sources"),
+
+  getSource: (id: string) =>
+    request<import("../types").EnergySourceDetail>(`/admin/energy-sources/${id}`),
+
+  createSource: (data: any) =>
+    request<import("../types").EnergySourceDetail>("/admin/energy-sources", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateSource: (id: string, data: any) =>
+    request<import("../types").EnergySourceDetail>(`/admin/energy-sources/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  deleteSource: (id: string) =>
+    request<void>(`/admin/energy-sources/${id}`, { method: "DELETE" }),
+
+  // Users
+  listUsers: (skip = 0, limit = 50) =>
+    request<import("../types").UserListResponse>(`/admin/users?skip=${skip}&limit=${limit}`),
+
+  getUser: (id: string) =>
+    request<import("../types").UserDetail>(`/admin/users/${id}`),
+
+  updateUser: (id: string, data: any) =>
+    request<import("../types").UserDetail>(`/admin/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  // System Settings
+  listSettings: (category?: string) =>
+    request<import("../types").SettingListResponse>(`/admin/settings${category ? `?category=${category}` : ""}`),
+
+  getSetting: (id: string) =>
+    request<import("../types").SystemSetting>(`/admin/settings/${id}`),
+
+  createSetting: (data: any) =>
+    request<import("../types").SystemSetting>("/admin/settings", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateSetting: (id: string, data: any) =>
+    request<import("../types").SystemSetting>(`/admin/settings/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  deleteSetting: (id: string) =>
+    request<void>(`/admin/settings/${id}`, { method: "DELETE" }),
+
+  // Audit Logs
+  listLogs: (skip = 0, limit = 50) =>
+    request<import("../types").LogListResponse>(`/admin/logs?skip=${skip}&limit=${limit}`),
+}
