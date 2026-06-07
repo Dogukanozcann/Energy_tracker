@@ -47,6 +47,7 @@ export interface EnergyConsumption {
   unit: string
   cost: number | null
   source: string
+  consumption_type: string
   is_estimated: boolean
   notes: string | null
   created_at: string
@@ -140,4 +141,48 @@ export interface BatchImportResponse {
   skipped: number
   errors: string[]
   message: string
+}
+
+// ---- Cost Savings ----
+
+export interface CostSavingsResponse {
+  total_consumption_cost: number
+  total_production_value: number
+  net_cost: number
+  savings: number
+}
+
+// ---- Weekly Comparison ----
+
+export interface WeeklyComparison {
+  current_week: {
+    total_co2: number
+    total_cost: number
+  }
+  previous_week: {
+    total_co2: number
+    total_cost: number
+  }
+  change_percent: number
+  is_increase: boolean
+}
+
+export interface CheckAlertsResponse {
+  alerts_created: number
+  notifications: number
+  message: string
+}
+
+// ---- Energy Source ----
+
+export interface EnergySource {
+  id: string
+  name: string
+  name_tr: string | null
+  category: string
+  unit: string
+  formula_type: string
+  is_renewable: boolean
+  co2_factor_scope_1: number | null
+  co2_factor_scope_2: number | null
 }
