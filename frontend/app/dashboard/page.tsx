@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
   Building2,
@@ -12,15 +12,18 @@ import {
   ArrowRight,
   RefreshCw,
   Upload,
+  Filter,
+  X,
+  Calendar,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
 import { ConsumptionChart } from "@/components/charts/ConsumptionChart"
-import { facilityApi, consumptionApi, carbonApi, alertApi, reportApi, savingsApi, comparisonApi } from "@/lib/api"
-import { formatNumber, formatCO2, formatDateTime, formatDate, getSeverityColor } from "@/lib/utils"
-import type { Facility, EnergyConsumptionListResponse, CarbonFootprintListResponse, AlertListResponse } from "@/types"
+import { facilityApi, consumptionApi, carbonApi, alertApi, reportApi, savingsApi, comparisonApi, sourceApi } from "@/lib/api"
+import { formatNumber, formatCO2, formatDateTime, getSeverityColor } from "@/lib/utils"
+import type { Facility, EnergyConsumptionListResponse, CarbonFootprintListResponse, AlertListResponse, EnergySource } from "@/types"
 import type { SavingsSummaryResponse, WeeklyComparisonResponse } from "@/lib/types"
 
 function StatCard({
@@ -37,7 +40,7 @@ function StatCard({
   color: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+    <div className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-200/80 p-5 shadow-sm">
       <div className="flex items-center gap-3">
         <div className={`p-2.5 rounded-lg ${color}`}>
           <Icon className="w-5 h-5" />
@@ -57,30 +60,38 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const [facilities, setFacilities] = useState<Facility[]>([])
   const [selectedFacility, setSelectedFacility] = useState<string>("")
+  const [sources, setSources] = useState<EnergySource[]>([])
   const [consumption, setConsumption] = useState<EnergyConsumptionListResponse | null>(null)
   const [footprint, setFootprint] = useState<CarbonFootprintListResponse | null>(null)
   const [alerts, setAlerts] = useState<AlertListResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [calculating, setCalculating] = useState(false)
+  const [calcMessage, setCalcMessage] = useState<string | null>(null)
   const [savingsSummary, setSavingsSummary] = useState<SavingsSummaryResponse | null>(null)
   const [weeklyComparison, setWeeklyComparison] = useState<WeeklyComparisonResponse | null>(null)
-  const [comparisonLoading, setComparisonLoading] = useState(false)
 
-  useEffect(() => {
-    facilityApi.list().then((res) => {
-      setFacilities(res.items)
-      if (res.items.length > 0) {
-        setSelectedFacility(res.items[0].id)
-      }
-      setLoading(false)
-    })
-  }, [])
+  // Filter state
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [selectedSourceId, setSelectedSourceId] = useState("")
+  const [consumptionType, setConsumptionType] = useState("")
+  const [filtersActive, setFiltersActive] = useState(false)
 
-  useEffect(() => {
+  const hasFilters = dateFrom || dateTo || selectedSourceId || consumptionType
+
+  const fetchData = useCallback(async () => {
     if (!selectedFacility) return
     setLoading(true)
+
+    const params: Record<string, any> = {}
+    if (dateFrom) params.date_from = dateFrom
+    if (dateTo) params.date_to = dateTo
+    if (selectedSourceId) params.energy_source_id = selectedSourceId
+    if (consumptionType) params.consumption_type = consumptionType
+    if (!hasFilters) params.limit = 10
+
     Promise.all([
-      consumptionApi.list(selectedFacility, { limit: 10 }),
+      consumptionApi.list(selectedFacility, params),
       carbonApi.footprints(selectedFacility),
       alertApi.list(selectedFacility, { limit: 5 }),
       savingsApi.summary(selectedFacility).catch(() => null),
@@ -94,20 +105,66 @@ export default function DashboardPage() {
         setWeeklyComparison(w)
       })
       .finally(() => setLoading(false))
-  }, [selectedFacility])
+  }, [selectedFacility, dateFrom, dateTo, selectedSourceId, consumptionType, hasFilters])
+
+  // Load facilities & sources on mount
+  useEffect(() => {
+    Promise.all([
+      facilityApi.list(),
+      sourceApi.list(),
+    ]).then(([facRes, srcRes]) => {
+      setFacilities(facRes.items)
+      setSources(srcRes)
+      if (facRes.items.length > 0) {
+        setSelectedFacility(facRes.items[0].id)
+      }
+      setLoading(false)
+    })
+  }, [])
+
+  // Fetch data when facility or filters change
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const handleApplyFilters = () => {
+    setFiltersActive(true)
+    // fetchData will be triggered by state change
+  }
+
+  const handleResetFilters = () => {
+    setDateFrom("")
+    setDateTo("")
+    setSelectedSourceId("")
+    setConsumptionType("")
+    setFiltersActive(false)
+  }
 
   const handleCalculate = async () => {
     if (!selectedFacility) return
     setCalculating(true)
+    setCalcMessage(null)
     try {
-      await carbonApi.calculateBatch(selectedFacility)
-      // Yenile
+      // 1. Calculate batch (creates CarbonFootprintItems)
+      const batchRes = await carbonApi.calculateBatch(selectedFacility)
+      
+      // 2. Generate yearly footprint so dashboard shows data
+      const currentYear = new Date().getFullYear()
+      await carbonApi.generateFootprint(selectedFacility, currentYear).catch(() => {
+        // Eğer aylık yoksa yıllık oluştur
+      })
+
+      setCalcMessage(batchRes.message || "Karbon hesaplaması tamamlandı.")
+
+      // 3. Yenile
       const [c, f] = await Promise.all([
-        consumptionApi.list(selectedFacility, { limit: 10 }),
+        consumptionApi.list(selectedFacility, hasFilters ? { date_from: dateFrom, date_to: dateTo, energy_source_id: selectedSourceId, consumption_type: consumptionType } : { limit: 10 }),
         carbonApi.footprints(selectedFacility),
       ])
       setConsumption(c)
       setFootprint(f)
+    } catch (err: any) {
+      setCalcMessage(err?.message || "Hesaplama sırasında hata oluştu.")
     } finally {
       setCalculating(false)
     }
@@ -123,18 +180,21 @@ export default function DashboardPage() {
   const totalConsumption = consumption?.total_value ?? 0
   const latestFootprint = footprint?.items?.[0]
   const alertItems = alerts?.items ?? []
+  const chartTitle = hasFilters
+    ? `Enerji Tüketimi (${consumption?.items.length ?? 0} kayıt)`
+    : "Enerji Tüketimi (Son 10 Kayıt)"
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">
             Hoş geldiniz, {user?.full_name}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <select
             value={selectedFacility}
             onChange={(e) => setSelectedFacility(e.target.value)}
@@ -174,6 +234,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Calculation message */}
+      {calcMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-3 rounded-lg flex items-center justify-between">
+          <span>{calcMessage}</span>
+          <button onClick={() => setCalcMessage(null)} className="text-green-600 hover:text-green-800">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Tesis yoksa uyarı */}
       {facilities.length === 0 && !loading && (
         <Card>
@@ -196,13 +266,100 @@ export default function DashboardPage() {
         </div>
       ) : facilities.length > 0 ? (
         <>
+          {/* Filter Bar */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-gray-200/80 p-4 shadow-sm">
+            <div className="flex items-center gap-2 mb-3">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">Filtreler</span>
+              {hasFilters && (
+                <span className="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">
+                  Aktif
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              {/* Date From */}
+              <div className="flex-1 min-w-[140px]">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Başlangıç</label>
+                <div className="relative">
+                  <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
+
+              {/* Date To */}
+              <div className="flex-1 min-w-[140px]">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Bitiş</label>
+                <div className="relative">
+                  <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
+
+              {/* Energy Source */}
+              <div className="flex-1 min-w-[140px]">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Enerji Kaynağı</label>
+                <select
+                  value={selectedSourceId}
+                  onChange={(e) => setSelectedSourceId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">Tümü</option>
+                  {sources.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name_tr || s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Consumption Type */}
+              <div className="flex-1 min-w-[120px]">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Tüketim Tipi</label>
+                <select
+                  value={consumptionType}
+                  onChange={(e) => setConsumptionType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">Tümü</option>
+                  <option value="consumption">Tüketim</option>
+                  <option value="production">Üretim</option>
+                </select>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleApplyFilters}>
+                  <Filter className="w-4 h-4" />
+                  Uygula
+                </Button>
+                {hasFilters && (
+                  <Button variant="ghost" size="sm" onClick={handleResetFilters}>
+                    <X className="w-4 h-4" />
+                    Sıfırla
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               icon={Zap}
               label="Toplam Tüketim"
               value={`${formatNumber(totalConsumption)} ${consumption?.items?.[0]?.unit || "kWh"}`}
-              sub="Seçili tesiste"
+              sub={hasFilters ? "Filtrelenmiş" : "Seçili tesiste"}
               color="bg-yellow-50 text-yellow-600"
             />
             <StatCard
@@ -232,7 +389,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Consumption Chart */}
             <div className="lg:col-span-2">
-              <Card title="Enerji Tüketimi (Son 10 Kayıt)">
+              <Card title={chartTitle}>
                 <ConsumptionChart data={chartData} unit={consumption?.items?.[0]?.unit || "kWh"} />
               </Card>
             </div>

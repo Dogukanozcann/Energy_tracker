@@ -37,7 +37,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <I18nProvider>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-transparent">
         <Sidebar />
         <main className="pl-60 transition-all duration-200">
           <div className="max-w-7xl mx-auto px-6 py-8">{children}</div>
