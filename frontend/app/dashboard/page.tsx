@@ -18,9 +18,10 @@ import { Card } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
 import { ConsumptionChart } from "@/components/charts/ConsumptionChart"
-import { facilityApi, consumptionApi, carbonApi, alertApi, reportApi } from "@/lib/api"
+import { facilityApi, consumptionApi, carbonApi, alertApi, reportApi, savingsApi, comparisonApi } from "@/lib/api"
 import { formatNumber, formatCO2, formatDateTime, formatDate, getSeverityColor } from "@/lib/utils"
 import type { Facility, EnergyConsumptionListResponse, CarbonFootprintListResponse, AlertListResponse } from "@/types"
+import type { SavingsSummaryResponse, WeeklyComparisonResponse } from "@/lib/types"
 
 function StatCard({
   icon: Icon,
@@ -61,6 +62,9 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<AlertListResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [calculating, setCalculating] = useState(false)
+  const [savingsSummary, setSavingsSummary] = useState<SavingsSummaryResponse | null>(null)
+  const [weeklyComparison, setWeeklyComparison] = useState<WeeklyComparisonResponse | null>(null)
+  const [comparisonLoading, setComparisonLoading] = useState(false)
 
   useEffect(() => {
     facilityApi.list().then((res) => {
@@ -79,11 +83,15 @@ export default function DashboardPage() {
       consumptionApi.list(selectedFacility, { limit: 10 }),
       carbonApi.footprints(selectedFacility),
       alertApi.list(selectedFacility, { limit: 5 }),
+      savingsApi.summary(selectedFacility).catch(() => null),
+      comparisonApi.weekly(selectedFacility).catch(() => null),
     ])
-      .then(([c, f, a]) => {
+      .then(([c, f, a, s, w]) => {
         setConsumption(c)
         setFootprint(f)
         setAlerts(a)
+        setSavingsSummary(s)
+        setWeeklyComparison(w)
       })
       .finally(() => setLoading(false))
   }, [selectedFacility])
@@ -274,6 +282,101 @@ export default function DashboardPage() {
                 )}
               </Card>
             </div>
+          </div>
+
+          {/* Savings & Weekly Comparison Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Cost Savings Card */}
+            <Card title="Yenilenebilir Enerji Tasarrufu" subtitle={savingsSummary ? `₺${formatNumber(savingsSummary.total_savings, 0)} toplam tasarruf` : "Veri yükleniyor..."}>
+              {savingsSummary ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-green-700">{formatNumber(savingsSummary.total_production, 0)}</p>
+                      <p className="text-xs text-green-600">Üretim (kWh)</p>
+                    </div>
+                    <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-emerald-700">₺{formatNumber(savingsSummary.total_savings, 0)}</p>
+                      <p className="text-xs text-emerald-600">Tasarruf</p>
+                    </div>
+                    <div className="bg-teal-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-teal-700">{formatNumber(savingsSummary.total_co2_avoided, 0)}</p>
+                      <p className="text-xs text-teal-600">CO₂ (kg) önlendi</p>
+                    </div>
+                    <div className="bg-cyan-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-cyan-700">{formatNumber(savingsSummary.total_tree_equivalent, 0)}</p>
+                      <p className="text-xs text-cyan-600">Ağaç eşdeğeri</p>
+                    </div>
+                  </div>
+                  {savingsSummary.source_breakdown.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-gray-500 uppercase">Kaynak Bazında</p>
+                      {savingsSummary.source_breakdown.map((s) => (
+                        <div key={s.source_name} className="flex justify-between text-sm">
+                          <span className="text-gray-600">{s.source_name}</span>
+                          <span className="font-medium">₺{formatNumber(s.savings, 0)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-400 text-sm">
+                  Tasarruf verisi bulunamadı.
+                </div>
+              )}
+            </Card>
+
+            {/* Weekly Comparison Card */}
+            <Card title="Haftalık Karşılaştırma" subtitle={weeklyComparison ? `${weeklyComparison.current_week_label} vs ${weeklyComparison.previous_week_label}` : "Veri yükleniyor..."}>
+              {weeklyComparison ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-center flex-1">
+                      <p className="text-xs text-gray-500">Önceki Hafta</p>
+                      <p className="text-lg font-bold text-gray-900">{formatNumber(weeklyComparison.previous_week_total, 0)}</p>
+                      <p className="text-xs text-gray-400">kWh</p>
+                    </div>
+                    <div className="text-center flex-1">
+                      <p className="text-xs text-gray-500">Bu Hafta</p>
+                      <p className="text-lg font-bold text-gray-900">{formatNumber(weeklyComparison.current_week_total, 0)}</p>
+                      <p className="text-xs text-gray-400">kWh</p>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <span className={`inline-flex items-center gap-1 text-sm font-medium px-3 py-1 rounded-full ${
+                      weeklyComparison.total_change_pct > 0 ? "bg-red-50 text-red-700" :
+                      weeklyComparison.total_change_pct < 0 ? "bg-green-50 text-green-700" :
+                      "bg-gray-50 text-gray-500"
+                    }`}>
+                      <TrendingUp className="w-4 h-4" />
+                      %{weeklyComparison.total_change_pct > 0 ? "+" : ""}{weeklyComparison.total_change_pct.toFixed(1)}
+                    </span>
+                  </div>
+                  {weeklyComparison.sources.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-gray-500 uppercase">Kaynak Bazında Değişim</p>
+                      {weeklyComparison.sources.map((s) => (
+                        <div key={s.energy_source_id} className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600">{s.energy_source_name}</span>
+                          <span className={`font-medium ${
+                            s.change_pct > 0 ? "text-red-600" :
+                            s.change_pct < 0 ? "text-green-600" :
+                            "text-gray-500"
+                          }`}>
+                            {s.change_pct > 0 ? "+" : ""}{s.change_pct.toFixed(1)}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-400 text-sm">
+                  Karşılaştırma verisi bulunamadı.
+                </div>
+              )}
+            </Card>
           </div>
 
           {/* Alerts Row */}
