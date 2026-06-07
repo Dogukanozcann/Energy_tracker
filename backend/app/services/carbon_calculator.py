@@ -1,14 +1,21 @@
 """
 Karbon Ayak İzi Hesaplama Motoru.
 
-GHG Protocol metodolojisine göre her enerji tüketim kaydının
-karbon karşılığını hesaplar ve carbon_footprint_items tablosuna yazar.
+Her enerji kaynağı tipine göre uygun formülü uygular:
 
-Hesaplama mantığı:
-  - Enerji kaynağının co2_factor_scope_1 varsa → Scope 1 (doğrudan yakıt)
-  - co2_factor_scope_2 varsa → Scope 2 (satın alınan elektrik)
-  - Hiçbiri yoksa → Scope 3 (tedarik zinciri, varsayılan 0)
-  - calculated_co2_kg = consumption_value * ilgili factor
+  - factor (varsayılan):  CO2 = consumption_value * factor
+  - fuel:                 CO2 = V * density * carbon_ratio * (44/12)  veya precomputed fuel_co2_per_liter
+  - dual_unit:            CO2 = V * factor(unit) — birime göre scope_1 ya da scope_1_alt
+
+Desteklenen kaynaklar ve formüller:
+  Şebeke Elektriği:  E = V * 0.45 kg CO2e/kWh
+  Doğalgaz (m³):     E = V * 2.02 kg CO2e/m³
+  Doğalgaz (kWh):    E = V * 0.183 kg CO2e/kWh
+  Dizel:             E = V * 2.64 kg CO2e/L  (V * 0.835 * 0.862 * 44/12)
+  Benzin:            E = V * 2.36 kg CO2e/L  (V * 0.740 * 0.870 * 44/12)
+  Su (m³):           E = V * 1.04 kg CO2e/m³
+  Kömür / diğer:     E = V * factor (esnek)
+  Güneş:             E = 0 (yenilenebilir, sıfır emisyon)
 """
 
 from datetime import datetime
@@ -31,7 +38,7 @@ class CarbonCalculatorService:
         self.db = db
 
     # ----------------------------------------------------------------
-    # PUBLIC: tek kayıt hesaplama
+    # PUBLIC
     # ----------------------------------------------------------------
 
     async def calculate(
@@ -40,17 +47,6 @@ class CarbonCalculatorService:
         user_id: UUID,
         force: bool = False,
     ) -> CarbonFootprintItem:
-        """
-        Bir tüketim kaydının karbon ayak izini hesaplar.
-
-        Parametreler:
-          consumption_id: Hesaplanacak tüketim kaydı ID'si
-          user_id:        Ownership doğrulaması için kullanıcı
-          force:          True = mevcut item varsa üzerine yaz
-
-        Dönüş: CarbonFootprintItem (yeni veya güncellenmiş)
-        """
-        # Tüketim kaydını energy_source ile birlikte getir
         q = (
             select(EnergyConsumption)
             .options(joinedload(EnergyConsumption.energy_source))
@@ -68,10 +64,6 @@ class CarbonCalculatorService:
 
         return await self._calculate_internal(consumption, force)
 
-    # ----------------------------------------------------------------
-    # PUBLIC: toplu hesaplama
-    # ----------------------------------------------------------------
-
     async def calculate_batch(
         self,
         facility_id: UUID,
@@ -80,20 +72,12 @@ class CarbonCalculatorService:
         date_to: datetime | None = None,
         force: bool = False,
     ) -> tuple[int, float]:
-        """
-        Bir tesisteki hesaplanmamış (veya force=True ise tüm) tüketim
-        kayıtları için karbon hesaplaması yapar.
-
-        Dönüş: (işlenen_kayıt_sayısı, toplam_co2_kg)
-        """
-        # Ownership kontrolü
         q_owner = select(Facility.id).where(
             Facility.id == facility_id, Facility.user_id == user_id
         )
         if (await self.db.execute(q_owner)).scalar_one_or_none() is None:
             raise ValueError("Tesis bulunamadı veya size ait değil.")
 
-        # Hesaplanacak tüketim kayıtlarını bul
         filters = [EnergyConsumption.facility_id == facility_id]
         if date_from:
             filters.append(EnergyConsumption.recorded_at >= date_from)
@@ -101,7 +85,6 @@ class CarbonCalculatorService:
             filters.append(EnergyConsumption.recorded_at <= date_to)
 
         if not force:
-            # Sadece henüz item'i olmayanları hesapla
             subq = (
                 select(CarbonFootprintItem.energy_consumption_id)
                 .where(CarbonFootprintItem.energy_consumption_id == EnergyConsumption.id)
@@ -128,7 +111,7 @@ class CarbonCalculatorService:
         return len(consumptions), total_co2
 
     # ----------------------------------------------------------------
-    # INTERNAL: hesaplama çekirdeği
+    # HESAPLAMA ÇEKİRDEĞİ
     # ----------------------------------------------------------------
 
     async def _calculate_internal(
@@ -136,58 +119,125 @@ class CarbonCalculatorService:
         consumption: EnergyConsumption,
         force: bool = False,
     ) -> CarbonFootprintItem:
-        """
-        Bir EnergyConsumption kaydını alır, scope ve faktör belirler,
-        carbon_footprint_item oluşturur veya günceller.
-        """
         source: EnergySource = consumption.energy_source
+        value = float(consumption.consumption_value)
+        unit = consumption.unit
 
-        # Scope ve faktör belirleme (öncelik: Scope 1 > Scope 2 > Scope 3)
-        if source.co2_factor_scope_1 is not None:
-            scope = "scope_1"
-            factor = float(source.co2_factor_scope_1)
-        elif source.co2_factor_scope_2 is not None:
-            scope = "scope_2"
-            factor = float(source.co2_factor_scope_2)
-        else:
-            scope = "scope_3"
-            factor = 0.0
+        # Kaynağın formula_type'ına göre hesapla
+        scope, factor, calculated_co2 = self._apply_formula(source, value, unit)
 
-        calculated_co2 = float(consumption.consumption_value) * factor
-
-        # Mevcut item var mı kontrol et
+        # Mevcut item var mı
         q = select(CarbonFootprintItem).where(
             CarbonFootprintItem.energy_consumption_id == consumption.id
         )
         existing = (await self.db.execute(q)).scalar_one_or_none()
 
         if existing and not force:
-            # Zaten hesaplanmış, force=False ise dokunma
             return existing
 
+        kwargs = dict(
+            scope=scope,
+            energy_source_id=source.id,
+            consumption_amount=value,
+            consumption_unit=unit,
+            co2_factor_used=factor,
+            calculated_co2_kg=round(calculated_co2, 4),
+            factor_source=source.co2_factor_source,
+        )
+
         if existing:
-            # Güncelle
-            existing.scope = scope
-            existing.energy_source_id = source.id
-            existing.consumption_amount = float(consumption.consumption_value)
-            existing.consumption_unit = consumption.unit
-            existing.co2_factor_used = factor
-            existing.calculated_co2_kg = calculated_co2
-            existing.factor_source = source.co2_factor_source
+            for k, v in kwargs.items():
+                setattr(existing, k, v)
             item = existing
         else:
-            # Yeni oluştur
             item = CarbonFootprintItem(
                 energy_consumption_id=consumption.id,
-                energy_source_id=source.id,
-                scope=scope,
-                consumption_amount=float(consumption.consumption_value),
-                consumption_unit=consumption.unit,
-                co2_factor_used=factor,
-                calculated_co2_kg=calculated_co2,
-                factor_source=source.co2_factor_source,
+                **kwargs,
             )
             self.db.add(item)
 
         await self.db.flush()
         return item
+
+    # ----------------------------------------------------------------
+    # FORMÜL SEÇİCİ
+    # ----------------------------------------------------------------
+
+    @staticmethod
+    def _apply_formula(source: EnergySource, value: float, unit: str) -> tuple[str, float, float]:
+        formula = source.formula_type or "factor"
+
+        if formula == "dual_unit":
+            return _calc_dual_unit(source, value, unit)
+
+        if formula == "fuel":
+            return _calc_fuel(source, value)
+
+        # factor (varsayılan)
+        return _calc_factor(source, value)
+
+
+# ====================================================================
+# FORMÜL İŞLEVLERİ
+# ====================================================================
+
+
+def _calc_factor(source: EnergySource, value: float) -> tuple[str, float, float]:
+    """E = V * EF — en basit çarpan yöntemi."""
+    if source.co2_factor_scope_1 is not None:
+        scope = "scope_1"
+        factor = float(source.co2_factor_scope_1)
+    elif source.co2_factor_scope_2 is not None:
+        scope = "scope_2"
+        factor = float(source.co2_factor_scope_2)
+    else:
+        scope = "scope_3"
+        factor = 0.0
+    return scope, factor, value * factor
+
+
+def _calc_dual_unit(source: EnergySource, value: float, unit: str) -> tuple[str, float, float]:
+    """Birime göre factor seç — doğalgaz m³→2.02, kWh→0.183 gibi."""
+    if source.co2_factor_scope_1 is not None:
+        base_scope = "scope_1"
+        base_factor = float(source.co2_factor_scope_1)
+        alt_factor = float(source.co2_factor_scope_1_alt) if source.co2_factor_scope_1_alt is not None else None
+    elif source.co2_factor_scope_2 is not None:
+        base_scope = "scope_2"
+        base_factor = float(source.co2_factor_scope_2)
+        alt_factor = float(source.co2_factor_scope_2_alt) if source.co2_factor_scope_2_alt is not None else None
+    else:
+        return "scope_3", 0.0, 0.0
+
+    alt_unit = source.unit_alt or ""
+
+    if unit == alt_unit and alt_factor is not None:
+        return base_scope, alt_factor, value * alt_factor
+
+    return base_scope, base_factor, value * base_factor
+
+
+def _calc_fuel(source: EnergySource, value: float) -> tuple[str, float, float]:
+    """
+    Araç yakıtı formülü:  E_CO2 = V * p * C * (44/12)
+
+    V: tüketim (litre)
+    p: yoğunluk (kg/L) — diesel=0.835, gasoline=0.740
+    C: karbon oranı — diesel=0.862, gasoline=0.870
+
+    Eğer fuel_co2_per_liter ön hesaplanmışsa doğrudan onu kullan.
+    """
+    scope = "scope_1"
+
+    precomputed = float(source.fuel_co2_per_liter) if source.fuel_co2_per_liter is not None else None
+    if precomputed is not None:
+        return scope, precomputed, value * precomputed
+
+    density = float(source.fuel_density) if source.fuel_density else 0.0
+    carbon = float(source.fuel_carbon_ratio) if source.fuel_carbon_ratio else 0.0
+
+    if density <= 0 or carbon <= 0:
+        return scope, 0.0, 0.0
+
+    factor = density * carbon * (44.0 / 12.0)
+    return scope, round(factor, 4), value * factor

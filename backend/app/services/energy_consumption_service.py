@@ -67,6 +67,7 @@ class EnergyConsumptionService:
         facility_id: UUID,
         user_id: UUID,
         energy_source_id: UUID | None = None,
+        consumption_type: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         skip: int = 0,
@@ -83,6 +84,10 @@ class EnergyConsumptionService:
         if energy_source_id:
             base_filters.append(
                 EnergyConsumption.energy_source_id == energy_source_id
+            )
+        if consumption_type:
+            base_filters.append(
+                EnergyConsumption.consumption_type == consumption_type
             )
         if date_from:
             base_filters.append(EnergyConsumption.recorded_at >= date_from)
