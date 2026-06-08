@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { ConsumptionChart } from "@/components/charts/ConsumptionChart"
 import { CsvUpload } from "@/components/upload/CsvUpload"
-import { formatNumber, formatDateTime } from "@/lib/utils"
+import { formatNumber, formatDateTime, toLocalISOString, nowLocalDatetime } from "@/lib/utils"
 import type { Facility, EnergyConsumptionListResponse, EnergySource } from "@/types"
 
 export default function EnergyPage() {
@@ -68,7 +68,7 @@ export default function EnergyPage() {
       await consumptionApi.create({
         facility_id: selected,
         energy_source_id: form.energy_source_id,
-        recorded_at: new Date(form.recorded_at).toISOString(),
+        recorded_at: toLocalISOString(form.recorded_at),
         consumption_value: Number(form.consumption_value),
         unit: form.unit,
         cost: form.cost ? Number(form.cost) : null,
@@ -78,7 +78,7 @@ export default function EnergyPage() {
       setShowAddForm(false)
       setForm({
         energy_source_id: "",
-        recorded_at: new Date().toISOString().slice(0, 16),
+        recorded_at: nowLocalDatetime(),
         consumption_value: "",
         unit: "kWh",
         cost: "",

@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/Badge"
 import { Button } from "@/components/ui/Button"
 import { ConsumptionChart } from "@/components/charts/ConsumptionChart"
 import { facilityApi, consumptionApi, carbonApi, alertApi, reportApi, savingsApi, comparisonApi, sourceApi } from "@/lib/api"
-import { formatNumber, formatCO2, formatDateTime, getSeverityColor } from "@/lib/utils"
+import { formatNumber, formatCO2, formatDateTime, getSeverityColor, toLocalISOString } from "@/lib/utils"
 import type { Facility, EnergyConsumptionListResponse, CarbonFootprintListResponse, AlertListResponse, EnergySource } from "@/types"
 import type { SavingsSummaryResponse, WeeklyComparisonResponse } from "@/lib/types"
 
@@ -85,8 +85,8 @@ export default function DashboardPage() {
     setLoading(true)
 
     const params: Record<string, any> = {}
-    if (dateFrom) params.date_from = dateFrom
-    if (dateTo) params.date_to = dateTo
+    if (dateFrom) params.date_from = `${dateFrom}T00:00:00`
+    if (dateTo) params.date_to = `${dateTo}T23:59:59`
     if (selectedSourceId) params.energy_source_id = selectedSourceId
     if (consumptionType) params.consumption_type = consumptionType
     if (!hasFilters) params.limit = 10
@@ -105,7 +105,11 @@ export default function DashboardPage() {
         setSavingsSummary(s)
         setWeeklyComparison(w)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        setLoading(false)
+        // batchResult'i temizle — yeni filtreler eski hesaplama sonucunu göstermesin
+        setBatchResult(null)
+      })
   }, [selectedFacility, dateFrom, dateTo, selectedSourceId, consumptionType, hasFilters])
 
   // Load facilities & sources on mount
@@ -146,12 +150,14 @@ export default function DashboardPage() {
     setCalculating(true)
     setCalcMessage(null)
     try {
-      // 1. Calculate batch with optional date range (creates CarbonFootprintItems)
+      // 1. Tarih filtrelerini ISO datetime'a çevir (input type="date" yyyy-MM-dd verir)
+      const dateFromISO = dateFrom ? `${dateFrom}T00:00:00` : undefined
+      const dateToISO = dateTo ? `${dateTo}T23:59:59` : undefined
       const batchRes = await carbonApi.calculateBatch(
         selectedFacility,
         false,
-        dateFrom || undefined,
-        dateTo || undefined,
+        dateFromISO,
+        dateToISO,
       )
 
       // 2. Eğer tarih aralığı seçiliyse footprint oluşturma — kullanıcı dashboard'da
@@ -171,9 +177,11 @@ export default function DashboardPage() {
       })
       setCalcMessage(batchRes.message || "Karbon hesaplaması tamamlandı.")
 
-      // 3. Yenile
+      // 3. Yenile (ISO datetime formatı kullan)
+      const refreshDateFrom = dateFrom ? `${dateFrom}T00:00:00` : undefined
+      const refreshDateTo = dateTo ? `${dateTo}T23:59:59` : undefined
       const [c, f] = await Promise.all([
-        consumptionApi.list(selectedFacility, hasFilters ? { date_from: dateFrom, date_to: dateTo, energy_source_id: selectedSourceId, consumption_type: consumptionType } : { limit: 10 }),
+        consumptionApi.list(selectedFacility, hasFilters ? { date_from: refreshDateFrom, date_to: refreshDateTo, energy_source_id: selectedSourceId, consumption_type: consumptionType } : { limit: 10 }),
         carbonApi.footprints(selectedFacility),
       ])
       setConsumption(c)
@@ -379,9 +387,9 @@ export default function DashboardPage() {
             />
             <StatCard
               icon={Leaf}
-              label="Karbon Ayak İzi"
-              value={formatCO2(latestFootprint?.total_co2_kg ?? 0)}
-              sub={latestFootprint ? `${latestFootprint.calculation_year} yılı` : "Henüz hesaplanmamış"}
+              label={hasFilters && batchResult ? "Karbon (Filtre)" : "Karbon Ayak İzi"}
+              value={hasFilters && batchResult ? formatCO2(batchResult.total_kg) : formatCO2(latestFootprint?.total_co2_kg ?? 0)}
+              sub={hasFilters && batchResult ? `${batchResult.count} kayıt işlendi` : (latestFootprint ? `${latestFootprint.calculation_year} yılı` : "Henüz hesaplanmamış")}
               color="bg-green-50 text-green-600"
             />
             <StatCard

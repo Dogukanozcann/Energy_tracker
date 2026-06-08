@@ -52,6 +52,32 @@ export function getSeverityColor(severity: string) {
   }
 }
 
+/**
+ * datetime-local input değerini (YYYY-MM-DDTHH:MM) local timezone offset'li
+ * ISO string'e çevirir. Örn: "2026-06-07T10:00" → "2026-06-07T10:00:00+03:00"
+ * 
+ * Bu, new Date(dt).toISOString()'in UTC'ye çevirip tarihi kaydırmasını engeller.
+ */
+export function toLocalISOString(dt: string): string {
+  const d = new Date(dt)
+  const tzOffset = -d.getTimezoneOffset() // dakika, UTC+3 için +180
+  const sign = tzOffset >= 0 ? "+" : "-"
+  const pad = (n: number) => String(Math.abs(n)).padStart(2, "0")
+  const tzH = pad(Math.floor(Math.abs(tzOffset) / 60))
+  const tzM = pad(Math.abs(tzOffset) % 60)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00${sign}${tzH}:${tzM}`
+}
+
+/**
+ * Local datetime'ı datetime-local input için formatlar (YYYY-MM-DDTHH:MM).
+ * new Date().toISOString().slice(0,16) UTC verdiği için local zamanı kullanırız.
+ */
+export function nowLocalDatetime(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export function getStatusColor(status: string) {
   switch (status) {
     case "new":
