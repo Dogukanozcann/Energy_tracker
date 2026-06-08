@@ -67,6 +67,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [calculating, setCalculating] = useState(false)
   const [calcMessage, setCalcMessage] = useState<string | null>(null)
+  const [batchResult, setBatchResult] = useState<{ count: number; total_kg: number } | null>(null)
   const [savingsSummary, setSavingsSummary] = useState<SavingsSummaryResponse | null>(null)
   const [weeklyComparison, setWeeklyComparison] = useState<WeeklyComparisonResponse | null>(null)
 
@@ -145,15 +146,29 @@ export default function DashboardPage() {
     setCalculating(true)
     setCalcMessage(null)
     try {
-      // 1. Calculate batch (creates CarbonFootprintItems)
-      const batchRes = await carbonApi.calculateBatch(selectedFacility)
-      
-      // 2. Generate yearly footprint so dashboard shows data
-      const currentYear = new Date().getFullYear()
-      await carbonApi.generateFootprint(selectedFacility, currentYear).catch(() => {
-        // Eğer aylık yoksa yıllık oluştur
-      })
+      // 1. Calculate batch with optional date range (creates CarbonFootprintItems)
+      const batchRes = await carbonApi.calculateBatch(
+        selectedFacility,
+        false,
+        dateFrom || undefined,
+        dateTo || undefined,
+      )
 
+      // 2. Eğer tarih aralığı seçiliyse footprint oluşturma — kullanıcı dashboard'da
+      //    filtrelediği aralığın karbon hesabını görsün istiyor. Batch calculate zaten
+      //    CarbonFootprintItem'ları oluşturur. Yıllık/aylık footprint oluşturmak yerine
+      //    doğrudan batch sonucunu göster.
+      if (!dateFrom && !dateTo) {
+        // Tarih filtresi yoksa yıllık footprint oluştur (eski davranış)
+        const currentYear = new Date().getFullYear()
+        await carbonApi.generateFootprint(selectedFacility, currentYear).catch(() => {})
+      }
+
+      // Batch sonucunu state'e kaydet (dashboard'da göstermek için)
+      setBatchResult({
+        count: batchRes.processed,
+        total_kg: batchRes.total_co2_kg,
+      })
       setCalcMessage(batchRes.message || "Karbon hesaplaması tamamlandı.")
 
       // 3. Yenile
@@ -396,8 +411,33 @@ export default function DashboardPage() {
 
             {/* Carbon Summary */}
             <div>
-              <Card title="Karbon Özeti">
-                {latestFootprint ? (
+              <Card title={hasFilters ? "Karbon (Filtrelenmiş)" : "Karbon Özeti"}>
+                {hasFilters && batchResult && batchResult.count > 0 ? (
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <p className="text-3xl font-bold text-gray-900">
+                        {formatCO2(batchResult.total_kg)}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {dateFrom && dateTo
+                          ? `${dateFrom} → ${dateTo}`
+                          : "Seçili aralık"}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">İşlenen kayıt</span>
+                        <span className="font-medium">{batchResult.count}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Ortalama CO₂/kayıt</span>
+                        <span className="font-medium">
+                          {formatCO2(batchResult.total_kg / batchResult.count)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : latestFootprint ? (
                   <div className="space-y-4">
                     <div className="text-center">
                       <p className="text-3xl font-bold text-gray-900">

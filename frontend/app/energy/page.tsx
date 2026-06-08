@@ -2,29 +2,48 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { Zap, Calendar, Filter, Upload } from "lucide-react"
-import { facilityApi, consumptionApi } from "@/lib/api"
+import { Zap, Calendar, Filter, Upload, Plus, X } from "lucide-react"
+import { facilityApi, consumptionApi, sourceApi } from "@/lib/api"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { ConsumptionChart } from "@/components/charts/ConsumptionChart"
 import { CsvUpload } from "@/components/upload/CsvUpload"
 import { formatNumber, formatDateTime } from "@/lib/utils"
-import type { Facility, EnergyConsumptionListResponse } from "@/types"
+import type { Facility, EnergyConsumptionListResponse, EnergySource } from "@/types"
 
 export default function EnergyPage() {
   const searchParams = useSearchParams()
   const [facilities, setFacilities] = useState<Facility[]>([])
+  const [sources, setSources] = useState<EnergySource[]>([])
   const [selected, setSelected] = useState(searchParams.get("facility_id") || "")
   const [data, setData] = useState<EnergyConsumptionListResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [showImport, setShowImport] = useState(false)
 
+  // Manuel ekleme form state
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    energy_source_id: "",
+    recorded_at: new Date().toISOString().slice(0, 16),
+    consumption_value: "",
+    unit: "kWh",
+    cost: "",
+    consumption_type: "consumption",
+    notes: "",
+  })
+
   useEffect(() => {
-    facilityApi.list().then((res) => {
-      setFacilities(res.items)
-      if (!selected && res.items.length > 0) {
-        setSelected(res.items[0].id)
+    Promise.all([
+      facilityApi.list(),
+      sourceApi.list(),
+    ]).then(([facRes, srcRes]) => {
+      setFacilities(facRes.items)
+      setSources(srcRes)
+      if (!selected && facRes.items.length > 0) {
+        setSelected(facRes.items[0].id)
       }
+      setLoading(false)
     })
   }, [])
 
@@ -35,6 +54,43 @@ export default function EnergyPage() {
       .then(setData)
       .finally(() => setLoading(false))
   }, [selected])
+
+  // Kaynak seçilince birimi otomatik doldur
+  useEffect(() => {
+    const src = sources.find((s) => s.id === form.energy_source_id)
+    if (src) setForm((f) => ({ ...f, unit: src.unit }))
+  }, [form.energy_source_id, sources])
+
+  const handleAddSubmit = async () => {
+    if (!selected || !form.energy_source_id || !form.consumption_value || !form.recorded_at) return
+    setSaving(true)
+    try {
+      await consumptionApi.create({
+        facility_id: selected,
+        energy_source_id: form.energy_source_id,
+        recorded_at: new Date(form.recorded_at).toISOString(),
+        consumption_value: Number(form.consumption_value),
+        unit: form.unit,
+        cost: form.cost ? Number(form.cost) : null,
+        consumption_type: form.consumption_type,
+        notes: form.notes || null,
+      })
+      setShowAddForm(false)
+      setForm({
+        energy_source_id: "",
+        recorded_at: new Date().toISOString().slice(0, 16),
+        consumption_value: "",
+        unit: "kWh",
+        cost: "",
+        consumption_type: "consumption",
+        notes: "",
+      })
+      // Refresh list
+      consumptionApi.list(selected, { limit: 50 }).then(setData)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const chartData = (data?.items ?? []).map((item) => ({
     label: formatDateTime(item.recorded_at).slice(0, 16),
@@ -58,12 +114,125 @@ export default function EnergyPage() {
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
+          <Button variant="primary" size="sm" onClick={() => setShowAddForm(true)}>
+            <Plus className="w-4 h-4" />
+            Manuel Ekle
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => setShowImport(!showImport)}>
             <Upload className="w-4 h-4" />
             CSV Yükle
           </Button>
         </div>
       </div>
+
+      {/* Manual Entry Form */}
+      {showAddForm && selected && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900">Manuel Tüketim Ekle</h2>
+              <button onClick={() => setShowAddForm(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              {/* Enerji Kaynağı */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Enerji Kaynağı *</label>
+                <select
+                  value={form.energy_source_id}
+                  onChange={(e) => setForm({ ...form, energy_source_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">Seçin...</option>
+                  {sources.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name_tr || s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tarih */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tarih & Saat *</label>
+                <input
+                  type="datetime-local"
+                  value={form.recorded_at}
+                  onChange={(e) => setForm({ ...form, recorded_at: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              {/* Değer ve Birim */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tüketim Değeri *</label>
+                  <input
+                    type="number" step="any" min="0"
+                    value={form.consumption_value}
+                    onChange={(e) => setForm({ ...form, consumption_value: e.target.value })}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Birim</label>
+                  <input
+                    value={form.unit}
+                    onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
+
+              {/* Maliyet */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Maliyet (₺) — isteğe bağlı</label>
+                <input
+                  type="number" step="any" min="0"
+                  value={form.cost}
+                  onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              {/* Tip */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tüketim Tipi</label>
+                <select
+                  value={form.consumption_type}
+                  onChange={(e) => setForm({ ...form, consumption_type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="consumption">Tüketim</option>
+                  <option value="production">Üretim</option>
+                </select>
+              </div>
+
+              {/* Notlar */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notlar</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  rows={2}
+                  placeholder="İsteğe bağlı not ekleyin..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowAddForm(false)}>İptal</Button>
+              <Button
+                onClick={handleAddSubmit}
+                disabled={saving || !form.energy_source_id || !form.consumption_value || !form.recorded_at}
+              >
+                {saving ? "Kaydediliyor..." : "Kaydet"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CSV Import */}
       {showImport && selected && (
