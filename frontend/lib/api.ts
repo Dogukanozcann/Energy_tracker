@@ -140,6 +140,26 @@ export const consumptionApi = {
       `/energy-consumption/?${searchParams}`,
     )
   },
+
+  create: (data: {
+    facility_id: string
+    energy_source_id: string
+    recorded_at: string
+    consumption_value: number
+    unit?: string
+    cost?: number | null
+    consumption_type?: string
+    notes?: string | null
+  }) =>
+    request<import("../types").EnergyConsumption>("/energy-consumption/", {
+      method: "POST",
+      body: JSON.stringify({
+        ...data,
+        source: "manual",
+        consumption_type: data.consumption_type || "consumption",
+        unit: data.unit || "kWh",
+      }),
+    }),
 }
 
 // ---- Imports ----
@@ -177,11 +197,15 @@ export const reportApi = {
 // ---- Carbon ----
 
 export const carbonApi = {
-  calculateBatch: (facilityId: string, force = false) =>
-    request<import("../types").BatchCalculateResponse>("/carbon/calculate-batch", {
+  calculateBatch: (facilityId: string, force = false, dateFrom?: string, dateTo?: string) => {
+    const body: Record<string, any> = { facility_id: facilityId, force_recalculate: force }
+    if (dateFrom) body.date_from = dateFrom
+    if (dateTo) body.date_to = dateTo
+    return request<import("../types").BatchCalculateResponse>("/carbon/calculate-batch", {
       method: "POST",
-      body: JSON.stringify({ facility_id: facilityId, force_recalculate: force }),
-    }),
+      body: JSON.stringify(body),
+    })
+  },
 
   footprints: (facilityId: string) =>
     request<import("../types").CarbonFootprintListResponse>(

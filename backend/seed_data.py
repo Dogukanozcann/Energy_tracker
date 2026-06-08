@@ -6,11 +6,14 @@ Kullanım:
     python seed_data.py
 
 Oluşturduğu:
-  - Test kullanıcısı (test@enerji.com / 123456)
+  - Admin test kullanıcısı (test@enerji.com / 123456 — role=admin)
+  - Viewer test kullanıcısı (izleyici@enerji.com / 123456 — role=viewer)
   - 1 tesis (İstanbul Ofis)
-  - 3 enerji kaynağı (Elektrik, Doğalgaz, Güneş)
+  - 8 enerji kaynağı (Elektrik, Doğalgaz, Güneş, Dizel, Benzin, Su, Kömür, LPG)
   - 3 aylık saatlik tüketim verisi (~6500 kayıt)
   - Karbon ayak izi hesaplamaları
+  - Sistem ayarları
+  - Denetim kayıtları (admin panodaki log sayfası için)
 """
 
 import asyncio
@@ -29,6 +32,8 @@ from app.models import (
     EnergySource,
     EnergyConsumption,
     CarbonFootprintItem,
+    SystemSetting,
+    AuditLog,
 )
 
 
@@ -47,78 +52,85 @@ ENERGY_SOURCES = [
         "co2_factor_source": "TÜİK 2024 - Türkiye elektrik şebeke faktörü (0.45 kg CO2e/kWh)",
         "factor_year": 2024,
         "is_renewable": False,
+        "is_active": True,
     },
     {
         "name": "natural_gas",
         "name_tr": "Doğalgaz",
         "category": "natural_gas",
-        "unit": "m\u00b3",
+        "unit": "m³",
         "formula_type": "dual_unit",
         "unit_alt": "kWh",
         "co2_factor_scope_1": 2.02,
         "co2_factor_scope_1_alt": 0.183,
-        "co2_factor_source": "IPCC 2024 - Doğalgaz: 2.02 kg CO2e/m\u00b3, 0.183 kg CO2e/kWh",
+        "co2_factor_source": "IPCC 2024 - Doğalgaz: 2.02 kg CO2e/m³, 0.183 kg CO2e/kWh",
         "factor_year": 2024,
         "is_renewable": False,
+        "is_active": True,
     },
     {
         "name": "solar_pv",
-        "name_tr": "G\u00fcne\u015f (PV)",
+        "name_tr": "Güneş (PV)",
         "category": "solar",
         "unit": "kWh",
         "formula_type": "factor",
         "co2_factor_scope_2": 0.0,
-        "co2_factor_source": "Yenilenebilir - s\u0131f\u0131r emisyon",
+        "co2_factor_source": "Yenilenebilir - sıfır emisyon",
         "factor_year": 2024,
         "is_renewable": True,
+        "is_active": True,
     },
     {
         "name": "diesel",
-        "name_tr": "Dizel (Ara\u00e7 Yak\u0131t\u0131)",
+        "name_tr": "Dizel (Araç Yakıtı)",
         "category": "diesel",
         "unit": "litre",
         "formula_type": "fuel",
         "fuel_density": 0.835,
         "fuel_carbon_ratio": 0.862,
         "fuel_co2_per_liter": 2.64,
-        "co2_factor_source": "E_CO2 = V * 0.835 * 0.862 * (44/12) \u2248 2.64 kg CO2e/L",
+        "co2_factor_source": "E_CO2 = V * 0.835 * 0.862 * (44/12) ≈ 2.64 kg CO2e/L",
         "factor_year": 2024,
         "is_renewable": False,
+        "is_active": True,
     },
     {
         "name": "gasoline",
-        "name_tr": "Benzin (Ara\u00e7 Yak\u0131t\u0131)",
+        "name_tr": "Benzin (Araç Yakıtı)",
         "category": "gasoline",
         "unit": "litre",
         "formula_type": "fuel",
         "fuel_density": 0.740,
         "fuel_carbon_ratio": 0.870,
         "fuel_co2_per_liter": 2.36,
-        "co2_factor_source": "E_CO2 = V * 0.740 * 0.870 * (44/12) \u2248 2.36 kg CO2e/L",
+        "co2_factor_source": "E_CO2 = V * 0.740 * 0.870 * (44/12) ≈ 2.36 kg CO2e/L",
         "factor_year": 2024,
         "is_renewable": False,
+        "is_active": True,
     },
     {
         "name": "water",
-        "name_tr": "Su T\u00fcketimi",
+        "name_tr": "Su Tüketimi",
         "category": "water",
-        "unit": "m\u00b3",
+        "unit": "m³",
         "formula_type": "factor",
         "co2_factor_scope_1": 1.04,
-        "co2_factor_source": "Su temini (0.34) + At\u0131ksu ar\u0131tma (0.70) = 1.04 kg CO2e/m\u00b3",
+        "co2_factor_source": "Su temini (0.34) + Atıksu arıtma (0.70) = 1.04 kg CO2e/m³",
         "factor_year": 2024,
         "is_renewable": False,
+        "is_active": True,
     },
     {
         "name": "coal",
-        "name_tr": "K\u00f6m\u00fcr",
+        "name_tr": "Kömür",
         "category": "coal",
         "unit": "kg",
         "formula_type": "factor",
         "co2_factor_scope_1": 2.42,
-        "co2_factor_source": "IPCC 2024 - Ta\u015f k\u00f6m\u00fcr\u00fc: 2.42 kg CO2e/kg",
+        "co2_factor_source": "IPCC 2024 - Taş kömürü: 2.42 kg CO2e/kg",
         "factor_year": 2024,
         "is_renewable": False,
+        "is_active": True,
     },
     {
         "name": "lpg",
@@ -130,6 +142,59 @@ ENERGY_SOURCES = [
         "co2_factor_source": "IPCC 2024 - LPG: 2.98 kg CO2e/kg",
         "factor_year": 2024,
         "is_renewable": False,
+        "is_active": True,
+    },
+]
+
+
+SYSTEM_SETTINGS = [
+    {
+        "key": "carbon.factor_year",
+        "value": "2024",
+        "description": "Karbon hesaplamalarında kullanılan güncel faktör yılı",
+        "category": "carbon",
+    },
+    {
+        "key": "carbon.default_methodology",
+        "value": "ipcc_2024",
+        "description": "Varsayılan karbon hesaplama metodolojisi",
+        "category": "carbon",
+    },
+    {
+        "key": "general.currency",
+        "value": "TRY",
+        "description": "Sistem genel para birimi",
+        "category": "general",
+    },
+    {
+        "key": "general.energy_unit",
+        "value": "kWh",
+        "description": "Varsayılan enerji birimi",
+        "category": "general",
+    },
+    {
+        "key": "alert.anomaly_threshold",
+        "value": "2.5",
+        "description": "Anomali tespiti için standart sapma eşik değeri",
+        "category": "alert",
+    },
+    {
+        "key": "alert.max_daily_alerts",
+        "value": "10",
+        "description": "Tesis başına günlük maksimum uyarı sayısı",
+        "category": "alert",
+    },
+    {
+        "key": "system.report_retention_days",
+        "value": "365",
+        "description": "Raporların saklanma süresi (gün)",
+        "category": "system",
+    },
+    {
+        "key": "system.session_timeout_minutes",
+        "value": "60",
+        "description": "Kullanıcı oturum zaman aşımı süresi",
+        "category": "system",
     },
 ]
 
@@ -162,14 +227,14 @@ async def seed():
             select(User).where(User.email == "test@enerji.com")
         )
         if existing.scalar_one_or_none():
-            print("! Veritabaninda zaten veri var. Tekrar calistirmak icin:")
-            print("   Once energy_tracker.db dosyasini sil, sonra backend'i restart et.")
+            print("! Veritabaninda zaten veri var. Tekrar calistirmak icin DB'yi silip tekrar dene:")
+            print("   del energy_tracker.db")
             return
 
         print("Seed basladi...")
 
-        # ── KULLANICI ──
-        user = User(
+        # ── ADMIN KULLANICI ──
+        admin_user = User(
             email="test@enerji.com",
             password_hash=hash_password("123456"),
             full_name="Test Kullanıcısı",
@@ -182,25 +247,52 @@ async def seed():
             is_active=True,
             email_verified_at=datetime.now(timezone.utc),
         )
-        db.add(user)
+        db.add(admin_user)
         await db.flush()
 
-        # ── KULLANICI TERCİHLERİ ──
-        prefs = UserPreference(
-            user_id=user.id,
+        # ── ADMIN TERCİHLERİ ──
+        db.add(UserPreference(
+            user_id=admin_user.id,
             language="tr",
             timezone="Europe/Istanbul",
             energy_unit="kWh",
             currency="TRY",
             weekly_report=True,
-        )
-        db.add(prefs)
+        ))
         await db.flush()
-        print(f"  [OK] Kullanici: test@enerji.com / 123456")
+        print(f"  [OK] Admin kullanici: test@enerji.com / 123456")
+
+        # ── VIEWER KULLANICI ──
+        viewer_user = User(
+            email="izleyici@enerji.com",
+            password_hash=hash_password("123456"),
+            full_name="İzleyici Kullanıcı",
+            company_name="Enerji A.Ş.",
+            sector="teknoloji",
+            city="Ankara",
+            district="Çankaya",
+            user_type="business",
+            role="viewer",
+            is_active=True,
+            email_verified_at=datetime.now(timezone.utc),
+        )
+        db.add(viewer_user)
+        await db.flush()
+
+        db.add(UserPreference(
+            user_id=viewer_user.id,
+            language="tr",
+            timezone="Europe/Istanbul",
+            energy_unit="kWh",
+            currency="TRY",
+            weekly_report=False,
+        ))
+        await db.flush()
+        print(f"  [OK] Viewer kullanici: izleyici@enerji.com / 123456")
 
         # ── TESİS ──
         facility = Facility(
-            user_id=user.id,
+            user_id=admin_user.id,
             name="İstanbul Merkez Ofis",
             description="Ana ofis binası - enerji takibi",
             facility_type="office",
@@ -365,13 +457,102 @@ async def seed():
 
         await db.commit()
         print(f"  [OK] Karbon hesaplamasi: {carbon_count} adet")
+
+        # ── SİSTEM AYARLARI ──
+        for s in SYSTEM_SETTINGS:
+            existing_setting = await db.execute(
+                select(SystemSetting).where(SystemSetting.key == s["key"])
+            )
+            if not existing_setting.scalar_one_or_none():
+                db.add(SystemSetting(**s))
+        await db.flush()
+        print(f"  [OK] Sistem ayarlari: {len(SYSTEM_SETTINGS)} adet")
+
+        # ── DENETİM KAYITLARI ──
+        audit_logs = [
+            AuditLog(
+                user_id=admin_user.id,
+                user_email=admin_user.email,
+                action="create",
+                resource="energy_source",
+                resource_id=str(sources["grid_electricity"].id),
+                details="Seed ile şebeke elektriği kaynağı oluşturuldu",
+                ip_address="127.0.0.1",
+            ),
+            AuditLog(
+                user_id=admin_user.id,
+                user_email=admin_user.email,
+                action="create",
+                resource="energy_source",
+                resource_id=str(sources["natural_gas"].id),
+                details="Seed ile doğalgaz kaynağı oluşturuldu",
+                ip_address="127.0.0.1",
+            ),
+            AuditLog(
+                user_id=admin_user.id,
+                user_email=admin_user.email,
+                action="create",
+                resource="energy_source",
+                resource_id=str(sources["solar_pv"].id),
+                details="Seed ile güneş enerjisi kaynağı oluşturuldu",
+                ip_address="127.0.0.1",
+            ),
+            AuditLog(
+                user_id=admin_user.id,
+                user_email=admin_user.email,
+                action="create",
+                resource="user",
+                resource_id=str(admin_user.id),
+                details="Admin kullanıcı oluşturuldu: test@enerji.com",
+                ip_address="127.0.0.1",
+            ),
+            AuditLog(
+                user_id=admin_user.id,
+                user_email=admin_user.email,
+                action="create",
+                resource="user",
+                resource_id=str(viewer_user.id),
+                details="Viewer kullanıcı oluşturuldu: izleyici@enerji.com",
+                ip_address="127.0.0.1",
+            ),
+            AuditLog(
+                user_id=admin_user.id,
+                user_email=admin_user.email,
+                action="create",
+                resource="setting",
+                details=f"{len(SYSTEM_SETTINGS)} adet sistem ayarı seed ile oluşturuldu",
+                ip_address="127.0.0.1",
+            ),
+            AuditLog(
+                user_id=admin_user.id,
+                user_email=admin_user.email,
+                action="create",
+                resource="facility",
+                resource_id=str(facility.id),
+                details="Tesis oluşturuldu: İstanbul Merkez Ofis",
+                ip_address="127.0.0.1",
+            ),
+            AuditLog(
+                user_id=admin_user.id,
+                user_email=admin_user.email,
+                action="update",
+                resource="setting",
+                details="Varsayılan sistem ayarları güncellendi",
+                ip_address="127.0.0.1",
+            ),
+        ]
+        for log in audit_logs:
+            db.add(log)
+        await db.commit()
+        print(f"  [OK] Denetim kayitlari: {len(audit_logs)} adet")
+
         print()
         print("==============================")
         print("  Seed tamamlandi!")
         print()
         print("  Giris bilgileri:")
-        print("    Email:  test@enerji.com")
-        print("    Sifre:  123456")
+        print("    Admin: test@enerji.com / 123456 (role=admin)")
+        print("    Viewer: izleyici@enerji.com / 123456 (role=viewer)")
         print()
         print("  Frontend: http://localhost:3000")
         print("  Backend:  http://localhost:8000")
