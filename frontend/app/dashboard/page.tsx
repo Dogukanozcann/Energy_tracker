@@ -88,7 +88,8 @@ export default function DashboardPage() {
     if (dateFrom) params.date_from = `${dateFrom}T00:00:00`
     if (dateTo) params.date_to = `${dateTo}T23:59:59`
     if (selectedSourceId) params.energy_source_id = selectedSourceId
-    if (consumptionType) params.consumption_type = consumptionType
+    // Varsayılan olarak sadece tüketim kayıtlarını göster (üretim ayrı hesaplanır)
+    params.consumption_type = consumptionType || "consumption"
     if (!hasFilters) params.limit = 10
 
     Promise.all([
@@ -157,7 +158,7 @@ export default function DashboardPage() {
       // Filtre yoksa force=false (sadece hesaplanmamış kayıtları işle)
       const batchRes = await carbonApi.calculateBatch(
         selectedFacility,
-        hasFilters,
+        !!hasFilters, // boolean'a çevir — hasFilters string olabilir
         dateFromISO,
         dateToISO,
       )
@@ -183,7 +184,7 @@ export default function DashboardPage() {
       const refreshDateFrom = dateFrom ? `${dateFrom}T00:00:00` : undefined
       const refreshDateTo = dateTo ? `${dateTo}T23:59:59` : undefined
       const [c, f] = await Promise.all([
-        consumptionApi.list(selectedFacility, hasFilters ? { date_from: refreshDateFrom, date_to: refreshDateTo, energy_source_id: selectedSourceId, consumption_type: consumptionType } : { limit: 10 }),
+        consumptionApi.list(selectedFacility, hasFilters ? { date_from: refreshDateFrom, date_to: refreshDateTo, energy_source_id: selectedSourceId, consumption_type: consumptionType || "consumption" } : { consumption_type: "consumption", limit: 10 }),
         carbonApi.footprints(selectedFacility),
       ])
       setConsumption(c)

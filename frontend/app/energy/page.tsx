@@ -20,12 +20,16 @@ export default function EnergyPage() {
   const [loading, setLoading] = useState(true)
   const [showImport, setShowImport] = useState(false)
 
+  // Filtre state
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+
   // Manuel ekleme form state
   const [showAddForm, setShowAddForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     energy_source_id: "",
-    recorded_at: new Date().toISOString().slice(0, 16),
+    recorded_at: nowLocalDatetime(),
     consumption_value: "",
     unit: "kWh",
     cost: "",
@@ -50,10 +54,13 @@ export default function EnergyPage() {
   useEffect(() => {
     if (!selected) return
     setLoading(true)
-    consumptionApi.list(selected, { limit: 50 })
+    const params: Record<string, any> = { limit: 50 }
+    if (dateFrom) params.date_from = `${dateFrom}T00:00:00`
+    if (dateTo) params.date_to = `${dateTo}T23:59:59`
+    consumptionApi.list(selected, params)
       .then(setData)
       .finally(() => setLoading(false))
-  }, [selected])
+  }, [selected, dateFrom, dateTo])
 
   // Kaynak seçilince birimi otomatik doldur
   useEffect(() => {
@@ -175,7 +182,7 @@ export default function EnergyPage() {
           <h1 className="text-2xl font-bold text-gray-900">Enerji Tüketimi</h1>
           <p className="text-sm text-gray-500 mt-1">Anlık ve geçmiş tüketim verileri</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <select
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
@@ -185,6 +192,22 @@ export default function EnergyPage() {
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 w-[140px]"
+            />
+            <span className="text-gray-400 text-sm">–</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 w-[140px]"
+            />
+          </div>
           <Button variant="primary" size="sm" onClick={() => setShowAddForm(true)}>
             <Plus className="w-4 h-4" />
             Manuel Ekle
@@ -447,6 +470,7 @@ export default function EnergyPage() {
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-2 font-medium text-gray-500">Tarih</th>
+                    <th className="text-center py-3 px-2 font-medium text-gray-500">Tip</th>
                     <th className="text-right py-3 px-2 font-medium text-gray-500">Değer</th>
                     <th className="text-right py-3 px-2 font-medium text-gray-500">Maliyet</th>
                     <th className="text-center py-3 px-2 font-medium text-gray-500">Kaynak</th>
@@ -456,6 +480,15 @@ export default function EnergyPage() {
                   {data.items.slice(0, 20).map((item) => (
                     <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="py-3 px-2 text-gray-700">{formatDateTime(item.recorded_at)}</td>
+                      <td className="py-3 px-2 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          item.consumption_type === "production"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-blue-100 text-blue-700"
+                        }`}>
+                          {item.consumption_type === "production" ? "Üretim" : "Tüketim"}
+                        </span>
+                      </td>
                       <td className="py-3 px-2 text-right font-medium">
                         {formatNumber(item.consumption_value)} {item.unit}
                       </td>
