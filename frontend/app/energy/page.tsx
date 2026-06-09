@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { Zap, Calendar, Filter, Upload, Plus, X } from "lucide-react"
+import { Zap, Calendar, Filter, Upload, Plus, X, TrendingUp, TrendingDown } from "lucide-react"
 import { facilityApi, consumptionApi, sourceApi } from "@/lib/api"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
-import { ConsumptionChart } from "@/components/charts/ConsumptionChart"
+import { ConsumptionChart, type ChartMode } from "@/components/charts/ConsumptionChart"
 import { CsvUpload } from "@/components/upload/CsvUpload"
 import { formatNumber, formatDateTime, toLocalISOString, nowLocalDatetime } from "@/lib/utils"
 import type { Facility, EnergyConsumptionListResponse, EnergySource } from "@/types"
@@ -61,6 +61,82 @@ export default function EnergyPage() {
     if (src) setForm((f) => ({ ...f, unit: src.unit }))
   }, [form.energy_source_id, sources])
 
+  // Chart mode
+  const [chartMode, setChartMode] = useState<ChartMode>("consumption")
+
+  // Chart data per mode
+  const chartData = useMemo(() => {
+    if (!data?.items) return []
+    const items = [...data.items].reverse()
+
+    switch (chartMode) {
+      case "cost":
+        return items.map((item) => ({
+          label: formatDateTime(item.recorded_at).slice(0, 16),
+          value: item.consumption_value,
+          cost: item.cost ?? 0,
+          type: item.consumption_type as "consumption" | "production",
+        }))
+      case "net":
+        return items.map((item) => ({
+          label: formatDateTime(item.recorded_at).slice(0, 16),
+          value: item.cost ?? 0,
+          cost: item.cost ?? 0,
+          type: item.consumption_type as "consumption" | "production",
+        }))
+      default:
+        return items.map((item) => ({
+          label: formatDateTime(item.recorded_at).slice(0, 16),
+          value: item.consumption_value,
+        }))
+    }
+  }, [data, chartMode])
+
+  // Net savings: group items by ISO week → show consumption vs production costs
+  const netChartData = useMemo(() => {
+    if (!data?.items) return []
+    const byWeek: Record<string, { consumption: number; production: number; label: string }> = {}
+
+    for (const item of data.items) {
+      const d = new Date(item.recorded_at)
+      const weekStart = new Date(d)
+      weekStart.setDate(d.getDate() - d.getDay() + 1) // Pazartesi
+      const weekKey = weekStart.toISOString().slice(0, 10)
+      const weekLabel = formatDateTime(weekStart.toISOString()).slice(0, 6)
+
+      if (!byWeek[weekKey]) {
+        byWeek[weekKey] = { consumption: 0, production: 0, label: weekLabel }
+      }
+      const cost = item.cost ?? 0
+      if (item.consumption_type === "production") {
+        byWeek[weekKey].production += cost
+      } else {
+        byWeek[weekKey].consumption += cost
+      }
+    }
+
+    return Object.values(byWeek).sort((a, b) => a.label.localeCompare(b.label))
+  }, [data])
+
+  // Net savings total
+  const netSavings = useMemo(() => {
+    let totalConsumptionCost = 0
+    let totalProductionIncome = 0
+    for (const item of data?.items ?? []) {
+      const cost = item.cost ?? 0
+      if (item.consumption_type === "production") {
+        totalProductionIncome += cost
+      } else {
+        totalConsumptionCost += cost
+      }
+    }
+    return {
+      consumptionCost: totalConsumptionCost,
+      productionIncome: totalProductionIncome,
+      net: totalProductionIncome - totalConsumptionCost,
+    }
+  }, [data])
+
   const handleAddSubmit = async () => {
     if (!selected || !form.energy_source_id || !form.consumption_value || !form.recorded_at) return
     setSaving(true)
@@ -91,11 +167,6 @@ export default function EnergyPage() {
       setSaving(false)
     }
   }
-
-  const chartData = (data?.items ?? []).map((item) => ({
-    label: formatDateTime(item.recorded_at).slice(0, 16),
-    value: item.consumption_value,
-  })).reverse()
 
   return (
     <div className="space-y-6">
@@ -290,9 +361,84 @@ export default function EnergyPage() {
           </div>
 
           {/* Chart */}
-          <Card title="Tüketim Grafiği">
-            <ConsumptionChart data={chartData} unit={data.items[0]?.unit || "kWh"} />
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700">
+                {chartMode === "consumption" && "Tüketim Grafiği"}
+                {chartMode === "cost" && "Maliyet Grafiği"}
+                {chartMode === "net" && "Net Tasarruf Grafiği"}
+              </h3>
+              <div className="flex items-center gap-2">
+                <select
+                  value={chartMode}
+                  onChange={(e) => setChartMode(e.target.value as ChartMode)}
+                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="consumption">Tüketim (kWh)</option>
+                  <option value="cost">Maliyet (₺)</option>
+                  <option value="net">Net Tasarruf (₺)</option>
+                </select>
+              </div>
+            </div>
+            <ConsumptionChart
+              data={chartData}
+              mode={chartMode}
+              unit={chartMode === "consumption" ? data.items[0]?.unit || "kWh" : "₺"}
+            />
           </Card>
+
+          {/* Net Savings Summary */}
+          {data.items.some((i) => i.cost != null) && (
+            <Card title="Dönemsel Net Maliyet">
+              <div className="space-y-4">
+                {/* Summary stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-red-50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-red-600 mb-1">Tüketim Maliyeti</p>
+                    <p className="text-lg font-bold text-red-700">
+                      {formatNumber(netSavings.consumptionCost, 2)} ₺
+                    </p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-green-600 mb-1">Üretim Geliri</p>
+                    <p className="text-lg font-bold text-green-700">
+                      {formatNumber(netSavings.productionIncome, 2)} ₺
+                    </p>
+                  </div>
+                  <div className={`rounded-lg p-3 text-center ${netSavings.net >= 0 ? "bg-emerald-50" : "bg-orange-50"}`}>
+                    <p className={`text-xs mb-1 ${netSavings.net >= 0 ? "text-emerald-600" : "text-orange-600"}`}>
+                      Net Tasarruf
+                    </p>
+                    <p className={`text-lg font-bold flex items-center justify-center gap-1 ${netSavings.net >= 0 ? "text-emerald-700" : "text-orange-700"}`}>
+                      {netSavings.net >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                      {formatNumber(Math.abs(netSavings.net), 2)} ₺
+                    </p>
+                  </div>
+                </div>
+
+                {/* Weekly net chart */}
+                {netChartData.length > 1 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                      Haftalık Dağılım
+                    </p>
+                    <div className="h-48">
+                      <ConsumptionChart
+                        data={netChartData.map((w) => ({
+                          label: w.label,
+                          value: w.consumption,
+                          consumption: w.consumption,
+                          production: w.production,
+                        }))}
+                        mode="net"
+                        unit="₺"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
 
           {/* Table */}
           <Card title="Tüketim Kayıtları">

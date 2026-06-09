@@ -153,9 +153,11 @@ export default function DashboardPage() {
       // 1. Tarih filtrelerini ISO datetime'a çevir (input type="date" yyyy-MM-dd verir)
       const dateFromISO = dateFrom ? `${dateFrom}T00:00:00` : undefined
       const dateToISO = dateTo ? `${dateTo}T23:59:59` : undefined
+      // Filtre varsa force=true (zaten hesaplanmış kayıtları yeniden hesapla)
+      // Filtre yoksa force=false (sadece hesaplanmamış kayıtları işle)
       const batchRes = await carbonApi.calculateBatch(
         selectedFacility,
-        false,
+        hasFilters,
         dateFromISO,
         dateToISO,
       )
