@@ -96,8 +96,9 @@ export default function DashboardPage() {
       consumptionApi.list(selectedFacility, params),
       carbonApi.footprints(selectedFacility),
       alertApi.list(selectedFacility, { limit: 5 }),
-      savingsApi.summary(selectedFacility).catch(() => null),
-      comparisonApi.weekly(selectedFacility).catch(() => null),
+      // NOT: savings + weekly endpoint'leri `date` tipi bekler (YYYY-MM-DD), `datetime` değil
+      savingsApi.summary(selectedFacility, dateFrom || undefined, dateTo || undefined, selectedSourceId || undefined, consumptionType || undefined).catch(() => null),
+      comparisonApi.weekly(selectedFacility, dateTo || undefined, selectedSourceId || undefined, consumptionType || undefined).catch(() => null),
     ])
       .then(([c, f, a, s, w]) => {
         setConsumption(c)
@@ -183,12 +184,17 @@ export default function DashboardPage() {
       // 3. Yenile (ISO datetime formatı kullan)
       const refreshDateFrom = dateFrom ? `${dateFrom}T00:00:00` : undefined
       const refreshDateTo = dateTo ? `${dateTo}T23:59:59` : undefined
-      const [c, f] = await Promise.all([
+      const [c, f, s, w] = await Promise.all([
         consumptionApi.list(selectedFacility, hasFilters ? { date_from: refreshDateFrom, date_to: refreshDateTo, energy_source_id: selectedSourceId, consumption_type: consumptionType || "consumption" } : { consumption_type: "consumption", limit: 10 }),
         carbonApi.footprints(selectedFacility),
+        // savings + weekly `date` tipi bekler, `datetime` değil
+        savingsApi.summary(selectedFacility, dateFrom || undefined, dateTo || undefined, selectedSourceId || undefined, consumptionType || undefined).catch(() => null),
+        comparisonApi.weekly(selectedFacility, dateTo || undefined, selectedSourceId || undefined, consumptionType || undefined).catch(() => null),
       ])
       setConsumption(c)
       setFootprint(f)
+      if (s) setSavingsSummary(s)
+      if (w) setWeeklyComparison(w)
     } catch (err: any) {
       setCalcMessage(err?.message || "Hesaplama sırasında hata oluştu.")
     } finally {

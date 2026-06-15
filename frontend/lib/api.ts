@@ -276,10 +276,12 @@ export const savingsApi = {
     )
   },
 
-  summary: (facilityId: string, dateFrom?: string, dateTo?: string) => {
+  summary: (facilityId: string, dateFrom?: string, dateTo?: string, energySourceId?: string, consumptionType?: string) => {
     const params = new URLSearchParams({ facility_id: facilityId })
     if (dateFrom) params.set("date_from", dateFrom)
     if (dateTo) params.set("date_to", dateTo)
+    if (energySourceId) params.set("energy_source_id", energySourceId)
+    if (consumptionType) params.set("consumption_type", consumptionType)
     return request<import("../types").SavingsSummaryResponse>(
       `/cost-savings/summary?${params}`,
     )
@@ -298,9 +300,11 @@ export const savingsApi = {
 // ---- Weekly Comparison ----
 
 export const comparisonApi = {
-  weekly: (facilityId: string, endDate?: string) => {
+  weekly: (facilityId: string, endDate?: string, energySourceId?: string, consumptionType?: string) => {
     const params = new URLSearchParams({ facility_id: facilityId })
     if (endDate) params.set("end_date", endDate)
+    if (energySourceId) params.set("energy_source_id", energySourceId)
+    if (consumptionType) params.set("consumption_type", consumptionType)
     return request<import("../types").WeeklyComparisonResponse>(
       `/weekly-comparison/?${params}`,
     )
