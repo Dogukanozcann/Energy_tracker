@@ -67,13 +67,15 @@ async def savings_summary(
     facility_id: UUID = Query(..., description="Tesis ID"),
     date_from: date | None = Query(None, description="Başlangıç tarihi"),
     date_to: date | None = Query(None, description="Bitiş tarihi"),
+    energy_source_id: UUID | None = Query(None, description="Enerji kaynağı filtresi"),
+    consumption_type: str | None = Query(None, description="Tüketim tipi (consumption/production)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Özet istatistikler: toplam üretim, tasarruf, CO2, ağaç eşdeğeri."""
     service = CostSavingsService(db)
     try:
-        summary = await service.get_summary(facility_id, current_user.id, date_from, date_to)
+        summary = await service.get_summary(facility_id, current_user.id, date_from, date_to, energy_source_id, consumption_type)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     return summary

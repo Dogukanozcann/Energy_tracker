@@ -17,13 +17,15 @@ router = APIRouter(prefix="/weekly-comparison", tags=["weekly-comparison"])
 async def compare_weeks(
     facility_id: UUID = Query(..., description="Tesis ID"),
     end_date: date | None = Query(None, description="Referans tarih (opsiyonel)"),
+    energy_source_id: UUID | None = Query(None, description="Enerji kaynağı filtresi"),
+    consumption_type: str | None = Query(None, description="Tüketim tipi (consumption/production)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Bu hafta vs geçen hafta karşılaştırması."""
     service = WeeklyComparisonService(db)
     try:
-        result = await service.compare_weeks(facility_id, current_user.id, end_date)
+        result = await service.compare_weeks(facility_id, current_user.id, end_date, energy_source_id, consumption_type)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     return result

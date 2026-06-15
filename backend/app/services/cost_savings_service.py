@@ -32,6 +32,8 @@ class CostSavingsService:
         user_id: UUID,
         date_from: date | None = None,
         date_to: date | None = None,
+        energy_source_id: UUID | None = None,
+        consumption_type: str | None = None,
         skip: int = 0,
         limit: int = 100,
     ) -> tuple[list[dict], int, float, float, float]:
@@ -53,6 +55,10 @@ class CostSavingsService:
             base_q = base_q.where(EnergyConsumption.recorded_at >= datetime.combine(date_from, datetime.min.time()))
         if date_to:
             base_q = base_q.where(EnergyConsumption.recorded_at <= datetime.combine(date_to, datetime.max.time()))
+        if energy_source_id:
+            base_q = base_q.where(EnergyConsumption.energy_source_id == energy_source_id)
+        if consumption_type:
+            base_q = base_q.where(EnergyConsumption.consumption_type == consumption_type)
 
         count_q = select(func.count()).select_from(base_q.subquery())
         total = (await self.db.execute(count_q)).scalar_one()
@@ -65,7 +71,8 @@ class CostSavingsService:
         total_co2 = 0.0
         for r in rows:
             src = r.energy_source
-            savings = round(float(r.consumption_value) * self.grid_rate, 2)
+            cost = float(r.cost) if r.cost else 0.0
+            savings = cost  # tasarruf = kullanıcının girdiği üretim maliyeti
             co2_avoided = round(float(r.consumption_value) * 0.45, 4)
             tree_eq = round(co2_avoided / 21, 2)
             total_savings += savings
@@ -91,10 +98,12 @@ class CostSavingsService:
         user_id: UUID,
         date_from: date | None = None,
         date_to: date | None = None,
+        energy_source_id: UUID | None = None,
+        consumption_type: str | None = None,
     ) -> dict:
-        """Özet istatistikler: toplam üretim, tasarruf, CO2, ağaç eşdeğeri."""
+        """Özet istatistikler: toplam üretim, tasarruf, CO2, ağaç eşdeğeri, maliyet."""
         items, total, total_savings, total_co2, total_tree = await self.list_by_facility(
-            facility_id, user_id, date_from, date_to, limit=99999
+            facility_id, user_id, date_from, date_to, energy_source_id, consumption_type, limit=99999
         )
 
         # Kaynak bazında kırılım

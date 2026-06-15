@@ -44,7 +44,9 @@ class WeeklyComparisonService:
             raise ValueError("Tesis bulunamadı veya size ait değil.")
 
     async def _get_week_total(
-        self, facility_id: UUID, start: datetime, end: datetime
+        self, facility_id: UUID, start: datetime, end: datetime,
+        energy_source_id: UUID | None = None,
+        consumption_type: str | None = None,
     ) -> float:
         """Tek bir haftanın toplam tüketimini döndürür."""
         q = select(
@@ -53,13 +55,20 @@ class WeeklyComparisonService:
             EnergyConsumption.facility_id == facility_id,
             EnergyConsumption.recorded_at >= start,
             EnergyConsumption.recorded_at <= end,
-            EnergyConsumption.consumption_type == "consumption",
         )
+        if consumption_type:
+            q = q.where(EnergyConsumption.consumption_type == consumption_type)
+        else:
+            q = q.where(EnergyConsumption.consumption_type == "consumption")
+        if energy_source_id:
+            q = q.where(EnergyConsumption.energy_source_id == energy_source_id)
         r = await self.db.execute(q)
         return float(r.scalar_one())
 
     async def _get_week_by_source(
-        self, facility_id: UUID, start: datetime, end: datetime
+        self, facility_id: UUID, start: datetime, end: datetime,
+        energy_source_id: UUID | None = None,
+        consumption_type: str | None = None,
     ) -> dict[UUID, float]:
         """Kaynak bazında haftalık tüketim döndürür."""
         q = (
@@ -71,10 +80,15 @@ class WeeklyComparisonService:
                 EnergyConsumption.facility_id == facility_id,
                 EnergyConsumption.recorded_at >= start,
                 EnergyConsumption.recorded_at <= end,
-                EnergyConsumption.consumption_type == "consumption",
             )
-            .group_by(EnergyConsumption.energy_source_id)
         )
+        if consumption_type:
+            q = q.where(EnergyConsumption.consumption_type == consumption_type)
+        else:
+            q = q.where(EnergyConsumption.consumption_type == "consumption")
+        if energy_source_id:
+            q = q.where(EnergyConsumption.energy_source_id == energy_source_id)
+        q = q.group_by(EnergyConsumption.energy_source_id)
         rows = await self.db.execute(q)
         return {row[0]: float(row[1]) for row in rows}
 
@@ -83,21 +97,23 @@ class WeeklyComparisonService:
         facility_id: UUID,
         user_id: UUID,
         end_date: date | None = None,
+        energy_source_id: UUID | None = None,
+        consumption_type: str | None = None,
     ) -> dict:
         """Bu hafta vs geçen hafta karşılaştırması."""
         await self._check_facility(facility_id, user_id)
         cur_start, cur_end, prev_start, prev_end = _get_week_boundaries(end_date)
 
-        current_total = await self._get_week_total(facility_id, cur_start, cur_end)
-        previous_total = await self._get_week_total(facility_id, prev_start, prev_end)
+        current_total = await self._get_week_total(facility_id, cur_start, cur_end, energy_source_id, consumption_type)
+        previous_total = await self._get_week_total(facility_id, prev_start, prev_end, energy_source_id, consumption_type)
 
         change_pct = 0.0
         if previous_total > 0:
             change_pct = round(((current_total - previous_total) / previous_total) * 100, 2)
 
         # Kaynak bazında
-        cur_sources = await self._get_week_by_source(facility_id, cur_start, cur_end)
-        prev_sources = await self._get_week_by_source(facility_id, prev_start, prev_end)
+        cur_sources = await self._get_week_by_source(facility_id, cur_start, cur_end, energy_source_id, consumption_type)
+        prev_sources = await self._get_week_by_source(facility_id, prev_start, prev_end, energy_source_id, consumption_type)
 
         # EnergySource isimlerini al
         all_source_ids = set(cur_sources.keys()) | set(prev_sources.keys())
