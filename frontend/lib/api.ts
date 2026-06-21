@@ -160,6 +160,9 @@ export const consumptionApi = {
         unit: data.unit || "kWh",
       }),
     }),
+
+  delete: (id: string) =>
+    request<void>(`/energy-consumption/${id}`, { method: "DELETE" }),
 }
 
 // ---- Imports ----

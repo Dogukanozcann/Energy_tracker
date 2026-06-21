@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { Zap, Calendar, Filter, Upload, Plus, X, TrendingUp, TrendingDown } from "lucide-react"
+import { Zap, Calendar, Filter, Upload, Plus, X, TrendingUp, TrendingDown, Trash2, AlertTriangle } from "lucide-react"
 import { facilityApi, consumptionApi, sourceApi } from "@/lib/api"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
@@ -71,10 +71,13 @@ export default function EnergyPage() {
   // Chart mode
   const [chartMode, setChartMode] = useState<ChartMode>("consumption")
 
-  // Chart data per mode
+  // Chart data per mode — üretim verileri tüketim grafiğine karışmaz
   const chartData = useMemo(() => {
     if (!data?.items) return []
-    const items = [...data.items].reverse()
+    // consumption/cost modunda sadece tüketim kayıtlarını göster
+    const items = [...data.items]
+      .filter((item) => chartMode !== "net" ? item.consumption_type === "consumption" : true)
+      .reverse()
 
     switch (chartMode) {
       case "cost":
@@ -143,6 +146,17 @@ export default function EnergyPage() {
       net: totalProductionIncome - totalConsumptionCost,
     }
   }, [data])
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Bu kaydı silmek istediğinize emin misiniz?")) return
+    try {
+      await consumptionApi.delete(id)
+      // Refresh list
+      consumptionApi.list(selected, { limit: 50 }).then(setData)
+    } catch (err: any) {
+      alert(err?.message || "Silme sırasında hata oluştu.")
+    }
+  }
 
   const handleAddSubmit = async () => {
     if (!selected || !form.energy_source_id || !form.consumption_value || !form.recorded_at) return
@@ -473,7 +487,9 @@ export default function EnergyPage() {
                     <th className="text-center py-3 px-2 font-medium text-gray-500">Tip</th>
                     <th className="text-right py-3 px-2 font-medium text-gray-500">Değer</th>
                     <th className="text-right py-3 px-2 font-medium text-gray-500">Maliyet</th>
+                    <th className="text-left py-3 px-2 font-medium text-gray-500">Notlar</th>
                     <th className="text-center py-3 px-2 font-medium text-gray-500">Kaynak</th>
+                    <th className="text-center py-3 px-2 font-medium text-gray-500"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -495,10 +511,22 @@ export default function EnergyPage() {
                       <td className="py-3 px-2 text-right text-gray-500">
                         {item.cost != null ? `${formatNumber(item.cost, 2)} ₺` : "—"}
                       </td>
+                      <td className="py-3 px-2 text-left text-gray-500 max-w-[160px] truncate text-xs">
+                        {item.notes || "—"}
+                      </td>
                       <td className="py-3 px-2 text-center">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600 capitalize">
                           {item.source}
                         </span>
+                      </td>
+                      <td className="py-3 px-2 text-center">
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Sil"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
