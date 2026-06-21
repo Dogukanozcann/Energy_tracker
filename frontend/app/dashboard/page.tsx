@@ -8,6 +8,7 @@ import {
   Leaf,
   Bell,
   TrendingUp,
+  TrendingDown,
   AlertTriangle,
   ArrowRight,
   RefreshCw,
@@ -505,21 +506,25 @@ export default function DashboardPage() {
               {savingsSummary ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                    <div className="bg-gradient-to-br from-green-50 to-green-100/60 rounded-xl p-4 text-center border border-green-200/50">
+                      <Zap className="w-5 h-5 text-green-500 mx-auto mb-1" />
                       <p className="text-2xl font-bold text-green-700">{formatNumber(savingsSummary.total_production, 0)}</p>
-                      <p className="text-xs text-green-600">Üretim (kWh)</p>
+                      <p className="text-xs text-green-600 font-medium">Üretim (kWh)</p>
                     </div>
-                    <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                    <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/60 rounded-xl p-4 text-center border border-emerald-200/50">
+                      <TrendingUp className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
                       <p className="text-2xl font-bold text-emerald-700">₺{formatNumber(savingsSummary.total_savings, 0)}</p>
-                      <p className="text-xs text-emerald-600">Tasarruf</p>
+                      <p className="text-xs text-emerald-600 font-medium">Tasarruf</p>
                     </div>
-                    <div className="bg-teal-50 rounded-lg p-3 text-center">
+                    <div className="bg-gradient-to-br from-teal-50 to-teal-100/60 rounded-xl p-4 text-center border border-teal-200/50">
+                      <Leaf className="w-5 h-5 text-teal-500 mx-auto mb-1" />
                       <p className="text-2xl font-bold text-teal-700">{formatNumber(savingsSummary.total_co2_avoided, 0)}</p>
-                      <p className="text-xs text-teal-600">CO₂ (kg) önlendi</p>
+                      <p className="text-xs text-teal-600 font-medium">CO₂ (kg) önlendi</p>
                     </div>
-                    <div className="bg-cyan-50 rounded-lg p-3 text-center">
+                    <div className="bg-gradient-to-br from-cyan-50 to-cyan-100/60 rounded-xl p-4 text-center border border-cyan-200/50">
+                      <Leaf className="w-5 h-5 text-cyan-500 mx-auto mb-1" />
                       <p className="text-2xl font-bold text-cyan-700">{formatNumber(savingsSummary.total_tree_equivalent, 0)}</p>
-                      <p className="text-xs text-cyan-600">Ağaç eşdeğeri</p>
+                      <p className="text-xs text-cyan-600 font-medium">Ağaç eşdeğeri</p>
                     </div>
                   </div>
                   {savingsSummary.source_breakdown.length > 0 && (
@@ -557,14 +562,19 @@ export default function DashboardPage() {
                       <p className="text-xs text-gray-400">kWh</p>
                     </div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center space-y-1">
                     <span className={`inline-flex items-center gap-1 text-sm font-medium px-3 py-1 rounded-full ${
                       weeklyComparison.total_change_pct > 0 ? "bg-red-50 text-red-700" :
                       weeklyComparison.total_change_pct < 0 ? "bg-green-50 text-green-700" :
                       "bg-gray-50 text-gray-500"
                     }`}>
-                      <TrendingUp className="w-4 h-4" />
-                      %{weeklyComparison.total_change_pct > 0 ? "+" : ""}{weeklyComparison.total_change_pct.toFixed(1)}
+                      {weeklyComparison.total_change_pct > 0 ? <TrendingUp className="w-4 h-4" /> :
+                       weeklyComparison.total_change_pct < 0 ? <TrendingDown className="w-4 h-4" /> :
+                       null}
+                      {weeklyComparison.total_change_pct > 0 ? "⚠️ Uyarı" :
+                       weeklyComparison.total_change_pct < 0 ? "✅ Tebrik" :
+                       "Değişim Yok"}
+                      {" %"}{weeklyComparison.total_change_pct > 0 ? "+" : ""}{weeklyComparison.total_change_pct.toFixed(1)}
                     </span>
                   </div>
                   {weeklyComparison.sources.length > 0 && (
@@ -573,11 +583,14 @@ export default function DashboardPage() {
                       {weeklyComparison.sources.map((s) => (
                         <div key={s.energy_source_id} className="flex justify-between items-center text-sm">
                           <span className="text-gray-600">{s.energy_source_name}</span>
-                          <span className={`font-medium ${
+                          <span className={`inline-flex items-center gap-1 font-medium ${
                             s.change_pct > 0 ? "text-red-600" :
                             s.change_pct < 0 ? "text-green-600" :
                             "text-gray-500"
                           }`}>
+                            {s.change_pct > 0 ? <TrendingUp className="w-3 h-3" /> :
+                             s.change_pct < 0 ? <TrendingDown className="w-3 h-3" /> :
+                             null}
                             {s.change_pct > 0 ? "+" : ""}{s.change_pct.toFixed(1)}%
                           </span>
                         </div>
