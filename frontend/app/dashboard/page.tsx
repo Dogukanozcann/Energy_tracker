@@ -220,15 +220,21 @@ export default function DashboardPage() {
     : "Enerji Tüketimi (Son 10 Kayıt)"
 
   // Birime göre kırılım — tüm kaynaklar seçiliyken farklı birimleri doğru göstermek için
-  const unitBreakdown = useMemo(() => {
-    if (!consumption?.items) return new Map<string, number>()
-    const map = new Map<string, number>()
+  const sourceBreakdown = useMemo(() => {
+    if (!consumption?.items) return new Map<string, { value: number; unit: string }>()
+    const map = new Map<string, { value: number; unit: string }>()
     for (const item of consumption.items) {
+      const src = sources.find((s) => s.id === item.energy_source_id)
+      const name = src?.name_tr || src?.name || item.energy_source_id.slice(0, 8)
       const unit = item.unit || "kWh"
-      map.set(unit, (map.get(unit) || 0) + item.consumption_value)
+      const prev = map.get(name)
+      map.set(name, {
+        value: (prev?.value || 0) + item.consumption_value,
+        unit,
+      })
     }
     return map
-  }, [consumption])
+  }, [consumption, sources])
 
   return (
     <div className="space-y-6">
@@ -405,9 +411,11 @@ export default function DashboardPage() {
               icon={Zap}
               label="Toplam Tüketim"
               value={
-                unitBreakdown.size === 1
-                  ? `${formatNumber(totalConsumption)} ${[...unitBreakdown.keys()][0]}`
-                  : [...unitBreakdown.entries()].map(([u, v]) => `${formatNumber(v, 1)} ${u}`).join(", ")
+                sourceBreakdown.size === 1
+                  ? `${formatNumber(totalConsumption)} ${[...sourceBreakdown.values()][0].unit}`
+                  : [...sourceBreakdown.entries()].map(([name, { value, unit }]) =>
+                      `${formatNumber(value, 1)} ${unit} (${name})`
+                    ).join(", ")
               }
               sub={hasFilters ? "Filtrelenmiş" : "Seçili tesiste"}
               color="bg-yellow-50 text-yellow-600"
