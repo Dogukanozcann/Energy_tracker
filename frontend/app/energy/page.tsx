@@ -6,7 +6,7 @@ import { Zap, Calendar, Filter, Upload, Plus, X, TrendingUp, TrendingDown, Trash
 import { facilityApi, consumptionApi, sourceApi } from "@/lib/api"
 import { Card } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
-import { ConsumptionChart, type ChartMode } from "@/components/charts/ConsumptionChart"
+import { ConsumptionChart } from "@/components/charts/ConsumptionChart"
 import { CsvUpload } from "@/components/upload/CsvUpload"
 import { formatNumber, formatDateTime, toLocalISOString, nowLocalDatetime } from "@/lib/utils"
 import type { Facility, EnergyConsumptionListResponse, EnergySource } from "@/types"
@@ -68,39 +68,28 @@ export default function EnergyPage() {
     if (src) setForm((f) => ({ ...f, unit: src.unit }))
   }, [form.energy_source_id, sources])
 
-  // Chart mode
-  const [chartMode, setChartMode] = useState<ChartMode>("consumption")
-
-  // Chart data per mode — üretim verileri tüketim grafiğine karışmaz
+  // Chart data — günlük gruplanmış tüketim, üretim ve maliyet
   const chartData = useMemo(() => {
     if (!data?.items) return []
-    // consumption/cost modunda sadece tüketim kayıtlarını göster
-    const items = [...data.items]
-      .filter((item) => chartMode !== "net" ? item.consumption_type === "consumption" : true)
-      .reverse()
+    const byDate: Record<string, { consumption: number; production: number; cost: number; label: string }> = {}
 
-    switch (chartMode) {
-      case "cost":
-        return items.map((item) => ({
-          label: formatDateTime(item.recorded_at).slice(0, 16),
-          value: item.consumption_value,
-          cost: item.cost ?? 0,
-          type: item.consumption_type as "consumption" | "production",
-        }))
-      case "net":
-        return items.map((item) => ({
-          label: formatDateTime(item.recorded_at).slice(0, 16),
-          value: item.cost ?? 0,
-          cost: item.cost ?? 0,
-          type: item.consumption_type as "consumption" | "production",
-        }))
-      default:
-        return items.map((item) => ({
-          label: formatDateTime(item.recorded_at).slice(0, 16),
-          value: item.consumption_value,
-        }))
+    for (const item of data.items) {
+      const dateKey = item.recorded_at.slice(0, 10) // YYYY-MM-DD
+      if (!byDate[dateKey]) {
+        byDate[dateKey] = { consumption: 0, production: 0, cost: 0, label: formatDateTime(item.recorded_at).slice(0, 6) }
+      }
+      if (item.consumption_type === "production") {
+        byDate[dateKey].production += item.consumption_value
+      } else {
+        byDate[dateKey].consumption += item.consumption_value
+      }
+      if (item.cost != null) {
+        byDate[dateKey].cost += item.cost
+      }
     }
-  }, [data, chartMode])
+
+    return Object.values(byDate).sort((a, b) => a.label.localeCompare(b.label))
+  }, [data])
 
   // Net savings: group items by ISO week → show consumption vs production costs
   const netChartData = useMemo(() => {
@@ -401,26 +390,12 @@ export default function EnergyPage() {
           <Card>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-700">
-                {chartMode === "consumption" && "Tüketim Grafiği"}
-                {chartMode === "cost" && "Maliyet Grafiği"}
-                {chartMode === "net" && "Net Tasarruf Grafiği"}
+                Tüketim, Üretim ve Maliyet Grafiği
               </h3>
-              <div className="flex items-center gap-2">
-                <select
-                  value={chartMode}
-                  onChange={(e) => setChartMode(e.target.value as ChartMode)}
-                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="consumption">Tüketim (kWh)</option>
-                  <option value="cost">Maliyet (₺)</option>
-                  <option value="net">Net Tasarruf (₺)</option>
-                </select>
-              </div>
             </div>
             <ConsumptionChart
               data={chartData}
-              mode={chartMode}
-              unit={chartMode === "consumption" ? data.items[0]?.unit || "kWh" : "₺"}
+              mode="combined"
             />
           </Card>
 

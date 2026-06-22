@@ -11,11 +11,11 @@ import {
   Legend,
 } from "recharts"
 
-export type ChartMode = "consumption" | "cost" | "net"
+export type ChartMode = "consumption" | "cost" | "net" | "combined"
 
 interface DataPoint {
   label: string
-  value: number
+  value?: number
   cost?: number
   type?: "consumption" | "production"
   consumption?: number
@@ -29,33 +29,21 @@ interface ConsumptionChartProps {
   mode?: ChartMode
 }
 
-const MODE_CONFIG: Record<ChartMode, {
-  barKey: string
-  barColor: string
-  unit: string
-  tooltipLabel: string
-}> = {
-  consumption: {
-    barKey: "value",
-    barColor: "#22a840",
-    unit: "kWh",
-    tooltipLabel: "Tüketim",
-  },
-  cost: {
-    barKey: "cost",
-    barColor: "#2563eb",
-    unit: "₺",
-    tooltipLabel: "Maliyet",
-  },
-  net: {
-    barKey: "value",
-    barColor: "#f59e0b",
-    unit: "₺",
-    tooltipLabel: "Net",
-  },
+const COMMON_MARGIN = { top: 5, right: 10, left: -10, bottom: 5 }
+
+function sharedTooltipStyle() {
+  return {
+    borderRadius: "8px",
+    border: "1px solid #e5e7eb",
+    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+  } as const
 }
 
-export function ConsumptionChart({ data, title, unit: propUnit, mode = "consumption" }: ConsumptionChartProps) {
+function formatVal(v: number) {
+  return v.toLocaleString("tr-TR")
+}
+
+export function ConsumptionChart({ data, title, mode = "consumption" }: ConsumptionChartProps) {
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
@@ -64,14 +52,11 @@ export function ConsumptionChart({ data, title, unit: propUnit, mode = "consumpt
     )
   }
 
-  const config = MODE_CONFIG[mode]
-  const unit = propUnit || config.unit
-
-  if (mode === "net") {
+  if (mode === "combined") {
     return (
       <ChartContainer title={title}>
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+          <BarChart data={data} margin={COMMON_MARGIN}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis
               dataKey="label"
@@ -84,13 +69,68 @@ export function ConsumptionChart({ data, title, unit: propUnit, mode = "consumpt
               tickFormatter={(v) => `${v}`}
             />
             <Tooltip
-              contentStyle={{
-                borderRadius: "8px",
-                border: "1px solid #e5e7eb",
-                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+              contentStyle={sharedTooltipStyle()}
+              formatter={(value: number, name: string) => {
+                switch (name) {
+                  case "consumption":
+                    return [`${formatVal(value)} kWh/m³`, "Tüketim"]
+                  case "production":
+                    return [`${formatVal(value)} kWh`, "Üretim"]
+                  case "cost":
+                    return [`${formatVal(value)} ₺`, "Maliyet"]
+                  default:
+                    return [formatVal(value), name]
+                }
               }}
+            />
+            <Legend />
+            <Bar
+              dataKey="consumption"
+              fill="#ef4444"
+              radius={[4, 4, 0, 0]}
+              name="Tüketim"
+              maxBarSize={24}
+            />
+            <Bar
+              dataKey="production"
+              fill="#22a840"
+              radius={[4, 4, 0, 0]}
+              name="Üretim"
+              maxBarSize={24}
+            />
+            <Bar
+              dataKey="cost"
+              fill="#2563eb"
+              radius={[4, 4, 0, 0]}
+              name="Maliyet"
+              maxBarSize={24}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartContainer>
+    )
+  }
+
+  if (mode === "net") {
+    return (
+      <ChartContainer title={title}>
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={data} margin={COMMON_MARGIN}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 12, fill: "#6b7280" }}
+              axisLine={{ stroke: "#e5e7eb" }}
+            />
+            <YAxis
+              tick={{ fontSize: 12, fill: "#6b7280" }}
+              axisLine={{ stroke: "#e5e7eb" }}
+              tickFormatter={(v) => `${v}`}
+            />
+            <Tooltip
+              contentStyle={sharedTooltipStyle()}
               formatter={(value: number, name: string) => [
-                `${value.toLocaleString("tr-TR")} ₺`,
+                `${formatVal(value)} ₺`,
                 name === "consumption" ? "Tüketim Maliyeti" : "Üretim Geliri",
               ]}
             />
@@ -115,10 +155,17 @@ export function ConsumptionChart({ data, title, unit: propUnit, mode = "consumpt
     )
   }
 
+  // Legacy modes (consumption / cost) — single bar
+  const MODE_CONFIG = {
+    consumption: { barKey: "value", barColor: "#22a840", unit: "kWh", tooltipLabel: "Tüketim" },
+    cost: { barKey: "cost", barColor: "#2563eb", unit: "₺", tooltipLabel: "Maliyet" },
+  } as const
+  const config = MODE_CONFIG[mode as keyof typeof MODE_CONFIG]
+
   return (
     <ChartContainer title={title}>
       <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+        <BarChart data={data} margin={COMMON_MARGIN}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis
             dataKey="label"
@@ -131,13 +178,9 @@ export function ConsumptionChart({ data, title, unit: propUnit, mode = "consumpt
             tickFormatter={(v) => `${v}`}
           />
           <Tooltip
-            contentStyle={{
-              borderRadius: "8px",
-              border: "1px solid #e5e7eb",
-              boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-            }}
+            contentStyle={sharedTooltipStyle()}
             formatter={(value: number) => [
-              `${value.toLocaleString("tr-TR")} ${unit}`,
+              `${formatVal(value)} ${config.unit}`,
               config.tooltipLabel,
             ]}
           />
@@ -146,7 +189,7 @@ export function ConsumptionChart({ data, title, unit: propUnit, mode = "consumpt
             dataKey={config.barKey}
             fill={config.barColor}
             radius={[4, 4, 0, 0]}
-            name={unit}
+            name={config.unit}
             maxBarSize={48}
           />
         </BarChart>
