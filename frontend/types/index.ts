@@ -124,6 +124,7 @@ export interface AlertListResponse {
 export interface BatchCalculateResponse {
   processed: number
   total_co2_kg: number
+  source_breakdown: Array<{ source_name: string; co2_kg: number }>
   message: string
 }
 

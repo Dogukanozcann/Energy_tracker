@@ -68,7 +68,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [calculating, setCalculating] = useState(false)
   const [calcMessage, setCalcMessage] = useState<string | null>(null)
-  const [batchResult, setBatchResult] = useState<{ count: number; total_kg: number } | null>(null)
+  const [batchResult, setBatchResult] = useState<{ count: number; total_kg: number; source_breakdown?: Array<{ source_name: string; co2_kg: number }> } | null>(null)
   const [savingsSummary, setSavingsSummary] = useState<SavingsSummaryResponse | null>(null)
   const [weeklyComparison, setWeeklyComparison] = useState<WeeklyComparisonResponse | null>(null)
 
@@ -181,6 +181,7 @@ export default function DashboardPage() {
       setBatchResult({
         count: batchRes.processed,
         total_kg: batchRes.total_co2_kg,
+        source_breakdown: batchRes.source_breakdown,
       })
       setCalcMessage(batchRes.message || "Karbon hesaplaması tamamlandı.")
 
@@ -472,12 +473,17 @@ export default function DashboardPage() {
                         <span className="text-gray-500">İşlenen kayıt</span>
                         <span className="font-medium">{batchResult.count}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Ortalama CO₂/kayıt</span>
-                        <span className="font-medium">
-                          {formatCO2(batchResult.total_kg / batchResult.count)}
-                        </span>
-                      </div>
+                      {batchResult.source_breakdown && batchResult.source_breakdown.length > 0 && (
+                        <div className="pt-2 border-t border-gray-100 space-y-1.5">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Kaynak Bazında</p>
+                          {batchResult.source_breakdown.map((s) => (
+                            <div key={s.source_name} className="flex justify-between text-sm">
+                              <span className="text-gray-600">{s.source_name}</span>
+                              <span className="font-medium text-gray-900">{formatCO2(s.co2_kg)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : latestFootprint ? (

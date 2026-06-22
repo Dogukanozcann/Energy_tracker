@@ -107,14 +107,18 @@ class CarbonCalculatorService:
         consumptions = list(result.unique().scalars().all())
 
         total_co2 = 0.0
+        source_breakdown: dict[str, float] = {}
         for c in consumptions:
             try:
                 item = await self._calculate_internal(c, force=True)
-                total_co2 += float(item.calculated_co2_kg)
+                co2 = float(item.calculated_co2_kg)
+                total_co2 += co2
+                src_name = c.energy_source.name_tr or c.energy_source.name if c.energy_source else "Bilinmeyen"
+                source_breakdown[src_name] = source_breakdown.get(src_name, 0.0) + co2
             except (ValueError, ZeroDivisionError):
                 continue
 
-        return len(consumptions), total_co2
+        return len(consumptions), total_co2, source_breakdown
 
     # ----------------------------------------------------------------
     # HESAPLAMA ÇEKİRDEĞİ

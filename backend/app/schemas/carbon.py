@@ -81,4 +81,5 @@ class CarbonFootprintListResponse(BaseModel):
 class BatchCalculateResponse(BaseModel):
     processed: int
     total_co2_kg: float
+    source_breakdown: list[dict] = []
     message: str

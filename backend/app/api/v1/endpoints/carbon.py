@@ -64,7 +64,7 @@ async def calculate_batch(
     """Bir tesisteki hesaplanmamış tüm tüketimler için toplu karbon hesaplaması yapar."""
     service = CarbonCalculatorService(db)
     try:
-        count, total_co2 = await service.calculate_batch(
+        count, total_co2, source_breakdown = await service.calculate_batch(
             facility_id=data.facility_id,
             user_id=current_user.id,
             date_from=data.date_from,
@@ -76,9 +76,15 @@ async def calculate_batch(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
+    breakdown_list = [
+        {"source_name": name, "co2_kg": round(val, 4)}
+        for name, val in sorted(source_breakdown.items(), key=lambda x: -x[1])
+    ]
+
     return BatchCalculateResponse(
         processed=count,
         total_co2_kg=round(total_co2, 4),
+        source_breakdown=breakdown_list,
         message=f"{count} kayıt işlendi, toplam {total_co2:.2f} kg CO2e hesaplandı."
         if count > 0
         else "Hesaplanacak yeni kayıt bulunamadı.",
