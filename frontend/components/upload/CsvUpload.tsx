@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Upload, FileText, X, CheckCircle, AlertCircle } from "lucide-react"
+import { Upload, FileText, X, CheckCircle, AlertCircle, Download } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { importApi } from "@/lib/api"
@@ -44,6 +44,21 @@ export function CsvUpload({ facilityId, onSuccess }: CsvUploadProps) {
     } finally {
       setUploading(false)
     }
+  }
+
+  const downloadTemplate = () => {
+    const headers = ["recorded_at", "consumption_value", "unit", "source", "cost", "consumption_type", "notes"]
+    const sampleRow = ["2026-01-15T14:00:00", "150.5", "kWh", "grid_electricity", "450.75", "consumption", ""]
+    const sampleRow2 = ["2026-01-15T10:00:00", "50", "m³", "natural_gas", "250.00", "consumption", "Isınma amaçlı"]
+    const csvContent = [headers.join(","), sampleRow.join(","), sampleRow2.join(",")].join("\n")
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;header=present" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "enerji_tuketim_sablonu.csv"
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const reset = () => {
@@ -115,8 +130,16 @@ export function CsvUpload({ facilityId, onSuccess }: CsvUploadProps) {
                     CSV dosyasını seçmek için tıklayın
                   </p>
                   <p className="text-xs text-gray-400 mt-1">
-                    Sütunlar: recorded_at, consumption_value, unit, source, cost
+                    Sütunlar: recorded_at, consumption_value, unit, source, cost, consumption_type, notes
                   </p>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); downloadTemplate(); }}
+                    className="mt-2 inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 underline underline-offset-2"
+                  >
+                    <Download className="w-3 h-3" />
+                    CSV Şablonu İndir
+                  </button>
                 </>
               )}
             </div>

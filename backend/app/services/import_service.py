@@ -59,6 +59,8 @@ class ImportService:
                 unit = row.get("unit") or row.get("birim") or "kWh"
                 source_label = row.get("source") or row.get("kaynak") or "manual"
                 cost_str = row.get("cost") or row.get("maliyet")
+                consumption_type = row.get("consumption_type") or row.get("tip") or "consumption"
+                notes = row.get("notes") or row.get("notlar") or None
 
                 if not recorded_at_str or not value_str:
                     result.skipped += 1
@@ -98,6 +100,8 @@ class ImportService:
                     consumption_value=value,
                     unit=unit,
                     cost=cost,
+                    consumption_type=consumption_type,
+                    notes=notes,
                     source=f"import:{source_label}",
                     is_estimated=False,
                 )
