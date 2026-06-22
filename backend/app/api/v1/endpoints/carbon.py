@@ -69,6 +69,8 @@ async def calculate_batch(
             user_id=current_user.id,
             date_from=data.date_from,
             date_to=data.date_to,
+            energy_source_id=data.energy_source_id,
+            consumption_type=data.consumption_type,
             force=data.force_recalculate,
         )
     except ValueError as e:

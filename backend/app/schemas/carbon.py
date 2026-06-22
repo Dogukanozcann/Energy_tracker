@@ -17,6 +17,8 @@ class CarbonBatchCalculateRequest(BaseModel):
     facility_id: UUID
     date_from: datetime | None = None
     date_to: datetime | None = None
+    energy_source_id: UUID | None = None
+    consumption_type: str | None = None
     force_recalculate: bool = False
 
 

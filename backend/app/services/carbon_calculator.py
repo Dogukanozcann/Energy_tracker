@@ -70,6 +70,8 @@ class CarbonCalculatorService:
         user_id: UUID,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        energy_source_id: UUID | None = None,
+        consumption_type: str | None = None,
         force: bool = False,
     ) -> tuple[int, float]:
         q_owner = select(Facility.id).where(
@@ -83,6 +85,10 @@ class CarbonCalculatorService:
             filters.append(EnergyConsumption.recorded_at >= date_from)
         if date_to:
             filters.append(EnergyConsumption.recorded_at <= date_to)
+        if energy_source_id:
+            filters.append(EnergyConsumption.energy_source_id == energy_source_id)
+        if consumption_type:
+            filters.append(EnergyConsumption.consumption_type == consumption_type)
 
         if not force:
             subq = (

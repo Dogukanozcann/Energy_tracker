@@ -163,6 +163,8 @@ export default function DashboardPage() {
         !!hasFilters, // boolean'a çevir — hasFilters string olabilir
         dateFromISO,
         dateToISO,
+        selectedSourceId || undefined,
+        consumptionType || undefined,
       )
 
       // 2. Eğer tarih aralığı seçiliyse footprint oluşturma — kullanıcı dashboard'da

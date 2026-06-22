@@ -200,10 +200,12 @@ export const reportApi = {
 // ---- Carbon ----
 
 export const carbonApi = {
-  calculateBatch: (facilityId: string, force = false, dateFrom?: string, dateTo?: string) => {
+  calculateBatch: (facilityId: string, force = false, dateFrom?: string, dateTo?: string, energySourceId?: string, consumptionType?: string) => {
     const body: Record<string, any> = { facility_id: facilityId, force_recalculate: force }
     if (dateFrom) body.date_from = dateFrom
     if (dateTo) body.date_to = dateTo
+    if (energySourceId) body.energy_source_id = energySourceId
+    if (consumptionType) body.consumption_type = consumptionType
     return request<import("../types").BatchCalculateResponse>("/carbon/calculate-batch", {
       method: "POST",
       body: JSON.stringify(body),
