@@ -48,7 +48,7 @@ function StatCard({
         </div>
         <div className="min-w-0">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{label}</p>
-          <p className="text-xl font-bold text-gray-900 mt-0.5">{value}</p>
+          <p className="text-sm font-bold text-gray-900 mt-0.5">{value}</p>
           {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
         </div>
       </div>
