@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import {
   Building2,
@@ -219,6 +219,17 @@ export default function DashboardPage() {
     ? `Enerji Tüketimi (${consumption?.items.length ?? 0} kayıt)`
     : "Enerji Tüketimi (Son 10 Kayıt)"
 
+  // Birime göre kırılım — tüm kaynaklar seçiliyken farklı birimleri doğru göstermek için
+  const unitBreakdown = useMemo(() => {
+    if (!consumption?.items) return new Map<string, number>()
+    const map = new Map<string, number>()
+    for (const item of consumption.items) {
+      const unit = item.unit || "kWh"
+      map.set(unit, (map.get(unit) || 0) + item.consumption_value)
+    }
+    return map
+  }, [consumption])
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -393,7 +404,11 @@ export default function DashboardPage() {
             <StatCard
               icon={Zap}
               label="Toplam Tüketim"
-              value={`${formatNumber(totalConsumption)} ${consumption?.items?.[0]?.unit || "kWh"}`}
+              value={
+                unitBreakdown.size === 1
+                  ? `${formatNumber(totalConsumption)} ${[...unitBreakdown.keys()][0]}`
+                  : [...unitBreakdown.entries()].map(([u, v]) => `${formatNumber(v, 1)} ${u}`).join(", ")
+              }
               sub={hasFilters ? "Filtrelenmiş" : "Seçili tesiste"}
               color="bg-yellow-50 text-yellow-600"
             />
