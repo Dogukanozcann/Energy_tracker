@@ -29,7 +29,7 @@ interface ConsumptionChartProps {
   mode?: ChartMode
 }
 
-const COMMON_MARGIN = { top: 5, right: 10, left: -10, bottom: 5 }
+const COMMON_MARGIN = { top: 10, right: 10, left: 30, bottom: 5 }
 
 function sharedTooltipStyle() {
   return {
@@ -200,7 +200,7 @@ export function ConsumptionChart({ data, title, mode = "consumption" }: Consumpt
 
 function ChartContainer({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="overflow-hidden">
       {title && (
         <h4 className="text-sm font-medium text-gray-700 mb-3">{title}</h4>
       )}

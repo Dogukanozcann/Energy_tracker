@@ -136,6 +136,15 @@ export default function EnergyPage() {
     }
   }, [data])
 
+  // Source name lookup
+  const sourceMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const s of sources) {
+      map[s.id] = s.name_tr || s.name
+    }
+    return map
+  }, [sources])
+
   const handleDelete = async (id: string) => {
     if (!window.confirm("Bu kaydı silmek istediğinize emin misiniz?")) return
     try {
@@ -387,7 +396,7 @@ export default function EnergyPage() {
           </div>
 
           {/* Chart */}
-          <Card>
+          <Card className="overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-700">
                 Tüketim, Üretim ve Maliyet Grafiği
@@ -401,7 +410,7 @@ export default function EnergyPage() {
 
           {/* Net Savings Summary */}
           {data.items.some((i) => i.cost != null) && (
-            <Card title="Dönemsel Net Maliyet">
+            <Card title="Dönemsel Net Maliyet" className="overflow-hidden">
               <div className="space-y-4">
                 {/* Summary stats */}
                 <div className="grid grid-cols-3 gap-3">
@@ -423,7 +432,7 @@ export default function EnergyPage() {
                     </p>
                     <p className={`text-lg font-bold flex items-center justify-center gap-1 ${netSavings.net >= 0 ? "text-emerald-700" : "text-orange-700"}`}>
                       {netSavings.net >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                      {formatNumber(Math.abs(netSavings.net), 2)} ₺
+                      {netSavings.net > 0 ? "+" : ""}{formatNumber(netSavings.net, 2)} ₺
                     </p>
                   </div>
                 </div>
@@ -434,8 +443,7 @@ export default function EnergyPage() {
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
                       Haftalık Dağılım
                     </p>
-                    <div className="h-48">
-                      <ConsumptionChart
+                    <ConsumptionChart
                         data={netChartData.map((w) => ({
                           label: w.label,
                           value: w.consumption,
@@ -445,7 +453,6 @@ export default function EnergyPage() {
                         mode="net"
                         unit="₺"
                       />
-                    </div>
                   </div>
                 )}
               </div>
@@ -464,7 +471,7 @@ export default function EnergyPage() {
                     <th className="text-right py-3 px-2 font-medium text-gray-500">Maliyet</th>
                     <th className="text-left py-3 px-2 font-medium text-gray-500">Notlar</th>
                     <th className="text-center py-3 px-2 font-medium text-gray-500">Kaynak</th>
-                    <th className="text-center py-3 px-2 font-medium text-gray-500"></th>
+                    <th className="text-center py-3 px-2 font-medium text-gray-500">İşlem</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -490,8 +497,8 @@ export default function EnergyPage() {
                         {item.notes || "—"}
                       </td>
                       <td className="py-3 px-2 text-center">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600 capitalize">
-                          {item.source}
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 whitespace-nowrap">
+                          {sourceMap[item.energy_source_id] || item.source}
                         </span>
                       </td>
                       <td className="py-3 px-2 text-center">
